@@ -1,0 +1,16 @@
+{
+  "name": "mathgen",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node .",
+    "q": "npm run build && npm start"
+  },
+  "keywords": [],
+  "author": "Azer Sadykhzadeh",
+  "devDependencies": {
+    "typescript": "^4.5.4"
+  }
+}
