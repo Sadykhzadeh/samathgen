@@ -1,14 +1,15 @@
 import { genNumber } from './genNumber';
 import { genValidOperator } from '../genValidOperator';
 import { genPairExpression } from './genPairExpression';
+import { Operators } from '../types';
 
 export const genExpression = (
   answer: number,
   length: number,
-  leftOperator?: '+' | '-' | '*' | '/',
-  rightOperator?: '+' | '-' | '*' | '/',
+  leftOperator?: Operators,
+  rightOperator?: Operators,
   onLeft?: boolean,
-): Array<number | '+' | '-' | '*' | '/'> => {
+): Array<number | Operators> => {
   const validOperators: Array<'+' | '-' | '*' | '/'> = genValidOperator(
     answer,
     onLeft,
@@ -16,12 +17,12 @@ export const genExpression = (
     rightOperator
   );
 
-  const pairExpression: [number, '+' | '-' | '*' | '/', number] = genPairExpression(
+  const pairExpression: [number, Operators, number] = genPairExpression(
     answer,
     validOperators
   );
 
-  const returnExpression: Array<number | '+' | '-' | '*' | '/'> = [...pairExpression];
+  const returnExpression: Array<number | Operators> = [...pairExpression];
 
   if (length > 2) {
     const left: boolean = (pairExpression[1] === '/' ||

@@ -1,12 +1,13 @@
+import { Operators } from '../types';
 import { isPrime } from './isPrime';
 
 export const genValidOperator = (
   n: number,
   onLeft?: boolean,
-  left?: '+' | '-' | '*' | '/',
-  right?: '+' | '-' | '*' | '/'
-): Array<'+' | '-' | '*' | '/'> => {
-  const validOpers: Array<'+' | '-' | '*' | '/'> = [];
+  left?: Operators,
+  right?: Operators
+): Array<Operators> => {
+  const validOpers: Array<Operators> = [];
   if (n !== 1 &&
     n !== -1 &&
     ((!left && !right) ||
