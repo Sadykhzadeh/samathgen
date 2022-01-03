@@ -1,6 +1,6 @@
 {
   "name": "samathgen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SaMathGen is NPM library that generates mathematical expressions for educational purposes.",
   "main": "dist/index.js",
   "scripts": {
@@ -8,9 +8,20 @@
     "start": "node .",
     "q": "npm run build && npm start"
   },
-  "keywords": [],
+  "keywords": [
+    "math"
+  ],
   "author": "Azer Sadykhzadeh",
   "devDependencies": {
     "typescript": "^4.5.4"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sadykhzadeh/mathgen.git"
+  },
+  "license": "GPL-v3.0",
+  "bugs": {
+    "url": "https://github.com/Sadykhzadeh/mathgen/issues"
+  },
+  "homepage": "https://github.com/Sadykhzadeh/mathgen#readme"
 }
