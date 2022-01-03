@@ -29,6 +29,6 @@ export const mathGen = (
   return {
     "task": expression,
     "answer": answer,
-    "quizOptions": genOptions(answer)
+    "quizOptions": more?.quizMode ? genOptions(answer) : []
   }
 }
