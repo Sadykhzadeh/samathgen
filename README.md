@@ -1,5 +1,5 @@
 <h2 align="center">MathGen</h2>
-<h3 align="center">Math is NPM library that generates mathematical expressions for educational purposes.</h3>
+<h3 align="center">MathGen is NPM library that generates mathematical expressions for educational purposes.</h3>
 
 <h2 align="center">⚙️Installation</h2>
 <h3 align="center">Use the package manager NPM to install foobar.</h3>
