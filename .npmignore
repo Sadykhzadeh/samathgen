@@ -1,1 +1,3 @@
-src
+src/
+*.md
+tsconfig.json

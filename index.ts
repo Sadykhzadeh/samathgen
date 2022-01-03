@@ -1,1 +1,0 @@
-export { mathGen } from './src/mathgen';
