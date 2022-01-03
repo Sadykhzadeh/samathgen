@@ -1,5 +1,6 @@
 import { genExpression } from './genFuncs/genExpression';
 import { genNumber } from './genFuncs/genNumber';
+import { genOptions } from './genFuncs/genOptions';
 import { Operators } from './types';
 
 export const mathGen = (
@@ -11,7 +12,8 @@ export const mathGen = (
   }
 ): {
   task: Array<number | Operators | string>,
-  answer: number
+  answer: number,
+  quizOptions: Array<number>
 } => {
   const answer = more?.answer ? more.answer : genNumber(10, 20);
   const expression: Array<number | Operators | string> = genExpression(answer, length);
@@ -26,6 +28,7 @@ export const mathGen = (
   }
   return {
     "task": expression,
-    "answer": answer
+    "answer": answer,
+    "quizOptions": genOptions(answer)
   }
 }
