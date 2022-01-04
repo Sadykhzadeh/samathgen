@@ -1,8 +1,8 @@
 {
   "name": "samathgen",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "SaMathGen is NPM library that generates mathematical expressions for educational purposes.",
-  "main": "dist/index.js",
+  "main": "dist/samathgen.js",
   "scripts": {
     "build": "tsc",
     "start": "node .",
