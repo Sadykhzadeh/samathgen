@@ -77,7 +77,7 @@ npm init -y && npm i samathgen
 ```js
 const { mathGen } = require("samathgen");
 console.log(mathGen(3, {
-  "answer": 20,
+  "answer": 40,
   "brackets": false,
   "quizOptions": true
 }));
@@ -88,9 +88,9 @@ console.log(mathGen(3, {
 ```js
 > node index.js                                                                                                                                    
 {
-  task: [ 40, '/', 4, '+', 10 ],
-  answer: 2,
-  quizOptions: [ 14, 17, 20, 15 ]
+  task: [ 100, '/', 5, '+', 20 ],
+  answer: 40,
+  quizOptions: [ 41, 40, 38, 30 ]
 }
 ```
 
@@ -119,4 +119,4 @@ Distributed under the MIT License. See [LICENSE](https://github.com/Sadykhzadeh/
 
 ## Acknowledgements
 
-* Comming soon
+* [Sieve of Eratosthenes](https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes)
