@@ -20,10 +20,10 @@ export const mathGen = (
   if (more?.brackets) {
     const evenInds = Array.from(Array(expression.length).keys()).filter(i => i % 2 == 0)
     let randInd = evenInds[genNumber(0, evenInds.length - 1)];
-    const bracketsEx = (genExpression(
+    const bracketsEx = genExpression(
       expression[randInd] as number,
       genNumber(2, 3)
-    ).join("") as string).replaceAll("--", "+").replaceAll("+-", "-").replaceAll("-+", "-");
+    ).join("").replaceAll("--", "+").replaceAll("+-", "-").replaceAll("-+", "-");
     expression[randInd] = `(${bracketsEx})`;
   }
   return {

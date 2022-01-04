@@ -1,17 +1,17 @@
-import { genMinus } from './genMinus';
-import { genPlus } from './genPlus';
-import { genMultiply } from './genMultiply';
-import { genDivisor } from './genDivisor';
+import { genMinus } from "./genMinus";
+import { genPlus } from "./genPlus";
+import { genMultiply } from "./genMultiply";
+import { genDivisor } from "./genDivisor";
 
 export const genPairNums = (
   n: number,
-  operator: '+' | '-' | '*' | '/'
+  operator: "+" | "-" | "*" | "/"
 ): [number, number] => {
-  return operator === '+'
+  return operator === "+"
     ? genPlus(n)
-    : operator === '-'
+    : operator === "-"
       ? genMinus(n)
-      : operator === '/'
+      : operator === "/"
         ? genDivisor(n)
         : genMultiply(n);
 };
