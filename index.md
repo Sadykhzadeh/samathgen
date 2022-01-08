@@ -1,37 +1,122 @@
-## Welcome to GitHub Pages
+<br/>
+<p align="center">
+  <h3 align="center">SaMathGen</h3>
 
-You can use the [editor on GitHub](https://github.com/Sadykhzadeh/samathgen/edit/gh-pages/index.md) to maintain and preview the content for your website in Markdown files.
+  <p align="center">
+    SaMathGen is NPM library that generates mathematical expressions for educational purposes.
+    <br/>
+    <br/>
+    <a href="https://github.com/Sadykhzadeh/samathgen/issues">Report Bug</a>
+    .
+    <a href="https://github.com/Sadykhzadeh/samathgen/issues">Request Feature</a>
+  </p>
+</p>
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+![Downloads](https://img.shields.io/github/downloads/Sadykhzadeh/samathgen/total) ![Contributors](https://img.shields.io/github/contributors/Sadykhzadeh/samathgen?color=dark-green) ![Forks](https://img.shields.io/github/forks/Sadykhzadeh/samathgen?style=social) ![Stargazers](https://img.shields.io/github/stars/Sadykhzadeh/samathgen?style=social) ![Issues](https://img.shields.io/github/issues/Sadykhzadeh/samathgen) ![License](https://img.shields.io/github/license/Sadykhzadeh/samathgen) 
 
-### Markdown
+## Table Of Contents
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+* [About the Project](#about-the-project)
+* [Built With](#built-with)
+* [Getting Started](#getting-started)
+  * [Prerequisites](#prerequisites)
+  * [Installation](#installation)
+* [Usage](#usage)
+* [Contributing](#contributing)
+* [License](#license)
+* [Authors](#authors)
+* [Acknowledgements](#acknowledgements)
 
-```markdown
-Syntax highlighted code block
+## About The Project
 
-# Header 1
-## Header 2
-### Header 3
+Generating various mathematical expressions with answer options independently, for example, for primary school teachers — is a routine job. 
 
-- Bulleted
-- List
+This library will help automate this process; it is enough to write the required arguments like expression's length, optionally brackets and other cool features.
 
-1. Numbered
-2. List
+## Built With
 
-**Bold** and _Italic_ and `Code` text
+- [💙TypeScript](https://typescriptlang.org/)
 
-[Link](url) and ![Image](src)
+## Getting Started
+
+So, you need to install Node.JS and generate Node.JS project in order to use SaMathGen library
+
+### Prerequisites
+
+There are several ways of installing **NodeJS**:
+
+ - [NVM](https://github.com/nvm-sh/nvm) - one of the easiest way
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# restart terminal (https://github.com/nvm-sh/nvm#troubleshooting-on-linux)
+nvm install --lts
+```
+ - via [NodeSource Node.js Binary Distributions](https://github.com/nodesource/distributions/blob/master/README.md) by a package manager
+ - Downloading ```tar.xz``` from [official website](https://nodejs.org/en/) 
+
+### Installation
+
+1. Create new Node.JS project
+
+```sh
+# works only in macOS & Linux, for Windows just create new folder and open it in cmd
+mkdir new_project && cd new_project
 ```
 
-For more details see [Basic writing and formatting syntax](https://docs.github.com/en/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
+2. After Installing Node.JS, initialize your Node.JS project and install SaMathGen
 
-### Jekyll Themes
+```sh
+npm init -y && npm i samathgen
+```
+3. That's it! :D
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/Sadykhzadeh/samathgen/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+## Usage
 
-### Support or Contact
+1. Create index.js(or .ts) and type this example: 
 
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.
+```js
+const { mathGen } = require("samathgen");
+console.log(mathGen(3, {
+  "answer": 40,
+  "brackets": false,
+  "quizOptions": true
+}));
+```
+
+2. Type ```node index.js``` (or .ts) in console and that's it! 🥳
+
+```js
+> node index.js                                                                                                                                    
+{
+  task: [ 100, '/', 5, '+', 20 ],
+  answer: 40,
+  quizOptions: [ 41, 40, 38, 30 ]
+}
+```
+
+## Contributing
+
+Contributions are what make the open source community such an amazing place to be learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+* If you have suggestions for adding or removing projects, feel free to [open an issue](https://github.com/Sadykhzadeh/samathgen/issues/new) to discuss it, or directly create a pull request after you edit the *README.md* file with necessary changes.
+* Please make sure you check your spelling and grammar.
+* Create individual PR for each suggestion.
+
+### Creating A Pull Request
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+Distributed under the MIT License. See [LICENSE](https://github.com/Sadykhzadeh/samathgen/blob/main/LICENSE.md) for more information.
+
+## Author
+
+* **Azer Sadykhzadeh** - *CyberSecurity student in BHOS* - [🐙Sadykhzadeh](https://github.com/Sadykhzadeh/)
+
+## Acknowledgements
+
+* [Sieve of Eratosthenes](https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes)
