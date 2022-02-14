@@ -5,8 +5,7 @@
   "main": "dist/samathgen.js",
   "scripts": {
     "build": "tsc",
-    "start": "node .",
-    "q": "npm run build && npm start"
+    "test": "jest"
   },
   "keywords": [
     "math",
@@ -19,7 +18,12 @@
     "url": "https://azer.is-a.dev"
   },
   "devDependencies": {
-    "typescript": "^4.5.4"
+    "@babel/preset-env": "^7.16.11",
+    "@babel/preset-typescript": "^7.16.7",
+    "typescript": "^4.5.4",
+    "ts-node": "^10.5.0",
+    "@types/jest": "^27.4.0",
+    "jest": "^27.5.1"
   },
   "repository": {
     "type": "git",
