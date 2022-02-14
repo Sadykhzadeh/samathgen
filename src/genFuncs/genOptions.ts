@@ -15,8 +15,8 @@ const shufflingMadness = () => {
 };
 
 export const genOptions = (first: number): Array<number> => {
-  const second: number = first + genNumber(2, 3);
-  const third: number = first - genNumber(2, 3);
+  const second: number = first + genNumber(2, 3),
+    third: number = first - genNumber(2, 3);
   let fourth: number = first + genNumber(-3, 3);
   while ([first, second, third].includes(fourth))
     fourth = first + genNumber(-3, 3);

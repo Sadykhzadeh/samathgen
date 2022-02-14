@@ -14,7 +14,7 @@ export const genMultiply = (n: number): [number, number] => {
   const divsOfMinusN: number[] = posDivs(-n);
   if (!divsOfMinusN.length) return [0, 0];
   const randDiv: number = divsOfMinusN[Math.floor(Math.random() * divsOfMinusN.length)] *
-    (genNumber(1, 2) === 1 ? 1 : -1);
+    ((genNumber(1, 2) === 1) ? 1 : -1);
 
   return [randDiv, n / randDiv];
 };
