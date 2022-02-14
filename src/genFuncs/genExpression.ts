@@ -10,7 +10,7 @@ export const genExpression = (
   rightOperator?: Operators,
   onLeft?: boolean
 ): Array<number | Operators> => {
-  const validOperators: Array<"+" | "-" | "*" | "/"> = genValidOperator(
+  const validOperators: Array<Operators> = genValidOperator(
     answer,
     onLeft,
     leftOperator,

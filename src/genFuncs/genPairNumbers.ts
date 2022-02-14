@@ -2,10 +2,11 @@ import { genMinus } from "./genMinus";
 import { genPlus } from "./genPlus";
 import { genMultiply } from "./genMultiply";
 import { genDivisor } from "./genDivisor";
+import { Operators } from '../types';
 
 export const genPairNums = (
   n: number,
-  operator: "+" | "-" | "*" | "/"
+  operator: Operators
 ): [number, number] => {
   return operator === "+"
     ? genPlus(n)

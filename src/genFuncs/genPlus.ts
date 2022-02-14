@@ -7,14 +7,11 @@ export const genPlus = (x: number): [number, number] => {
   }
   const genNum: number = genNumber(-2 * x, 2 * x);
   if (!genNum || genNum == x)
-    return [0, x].sort((a, b) => a - b) as [number, number];
+    return [Math.min(0, x), Math.max(0, x)];
   if (x > 0) {
     if (genNum > 0) {
       if (genNum < x) {
-        return [genNum, x - genNum].sort(() => Math.random() - 0.5) as [
-          number,
-          number
-        ];
+        return [Math.min(genNum, x - genNum), Math.max(genNum, x - genNum)];
       } else return [-Math.abs(x - genNum), genNum];
     } else return [genNum, x - genNum];
   } else return [x - Math.abs(genNum), Math.abs(genNum)];
