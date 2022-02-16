@@ -1,0 +1,6 @@
+{
+  "coverageReporters": [
+    "text-summary",
+    "html"
+  ]
+}
