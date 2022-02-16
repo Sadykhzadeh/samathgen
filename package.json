@@ -4,7 +4,7 @@
   "description": "NPM library that generates math expressions for education purposes.",
   "main": "dist/samathgen.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --module system",
     "test": "jest --config jest.json --coverage"
   },
   "keywords": [
@@ -37,5 +37,6 @@
   "engines": {
     "node": ">=16.0.0",
     "npm": ">=8.3.0"
-  }
+  },
+  "types": "./dist/types/"
 }
