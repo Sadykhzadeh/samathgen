@@ -1,6 +1,6 @@
 {
   "name": "samathgen",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "NPM library that generates math expressions for education purposes.",
   "main": "dist/samathgen.js",
   "scripts": {
