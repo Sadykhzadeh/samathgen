@@ -6,19 +6,11 @@
       "es2021"
     ],
     "rootDir": "./src/",
-    // "outDir": "./dist/",
-    "outFile": "./dist/main.js",
+    "outDir": "./dist/",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "declaration": true,
-    // "declarationDir": "./dist/types/",
     "skipLibCheck": true,
     "moduleResolution": "node"
-  },
-  "exclude": [
-    "node_modules",
-    "_*",
-    "**/*.d.ts"
-  ]
+  }
 }
