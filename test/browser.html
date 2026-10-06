@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>samathgen in the browser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font: 16px/1.5 system-ui, sans-serif;
+      margin: 0 auto;
+      padding: 16px;
+      max-width: 48rem;
+    }
+
+    #summary {
+      font-weight: 600;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    td,
+    th {
+      border-bottom: 1px solid #ddd;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    td:nth-child(1) {
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>samathgen in the browser</h1>
+  <p>
+    The browser entry point needs <code>init()</code> awaited once, because a
+    WebAssembly module over 4&nbsp;kB cannot be compiled synchronously on the
+    main thread. Serve this directory over HTTP and open the page; opening the
+    file directly will not work, since modules need an origin.
+  </p>
+  <p id="summary">loading&hellip;</p>
+  <table>
+    <thead>
+      <tr>
+        <th>task</th>
+        <th>answer</th>
+        <th>eval()</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script type="module">
+    import { init, mathGen } from '../js/web.js'
+
+    const summary = document.getElementById('summary')
+    const rows = document.getElementById('rows')
+
+    try {
+      await init()
+
+      // The same contract the Node suite checks, over a smaller sample so the
+      // page stays responsive.
+      const SAMPLES = 20000
+      let wrong = 0
+      for (let i = 0; i < SAMPLES; i++) {
+        const result = mathGen(2 + (i % 7), { brackets: i % 3 === 0, quizMode: true })
+        const text = result.task.join('')
+        if (eval(text) !== result.answer) wrong++
+      }
+
+      for (let seed = 1; seed <= 8; seed++) {
+        const result = mathGen(5, { seed, quizMode: true })
+        const text = result.task.join('')
+        const row = document.createElement('tr')
+        for (const value of [text, result.answer, eval(text)]) {
+          const cell = document.createElement('td')
+          cell.textContent = String(value)
+          row.append(cell)
+        }
+        rows.append(row)
+      }
+
+      summary.textContent = wrong === 0
+        ? `${SAMPLES.toLocaleString('en-US')} tasks generated, every one evaluates to its answer`
+        : `${wrong} of ${SAMPLES} did not evaluate to their answer`
+      summary.dataset.result = wrong === 0 ? 'pass' : 'fail'
+    } catch (error) {
+      summary.textContent = `failed: ${error.message}`
+      summary.dataset.result = 'fail'
+    }
+  </script>
+</body>
+
+</html>

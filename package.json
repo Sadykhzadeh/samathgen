@@ -1,47 +1,58 @@
 {
   "name": "samathgen",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "NPM library that generates math expressions for education purposes.",
-  "main": "dist/samathgen.js",
-  "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "jest --config jest.json --coverage",
-    "audit:contract": "node scripts/contract-audit.cjs",
-    "prepublishOnly": "npm run build"
+  "type": "module",
+  "main": "js/node.cjs",
+  "types": "js/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./js/index.d.ts",
+      "browser": "./js/web.js",
+      "node": "./js/node.cjs",
+      "default": "./js/node.cjs"
+    }
   },
+  "files": [
+    "js",
+    "dist",
+    "Cargo.toml",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
   "keywords": [
     "math",
     "generation",
     "expression",
-    "generator"
+    "generator",
+    "wasm",
+    "rust"
   ],
   "author": {
     "name": "Azer Sadykhzadeh",
     "url": "https://azer.is-a.dev"
   },
-  "devDependencies": {
-    "@babel/preset-env": "^7.28.3",
-    "@babel/preset-typescript": "^7.27.1",
-    "@types/jest": "^30.0.0",
-    "jest": "^30.2.0",
-    "typescript": "^5.9.2"
-  },
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sadykhzadeh/mathgen.git"
+    "url": "git+https://got.az/azer/samathgen.git"
   },
-  "license": "GPL-3.0-or-later",
-  "homepage": "https://samathgen.js.org/",
   "bugs": {
-    "url": "https://github.com/Sadykhzadeh/mathgen/issues"
+    "url": "https://got.az/azer/samathgen/issues"
   },
+  "homepage": "https://samathgen.js.org/",
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=18.0.0"
   },
-  "types": "dist/samathgen.d.ts",
-  "files": [
-    "dist"
-  ]
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "cargo test --release && node test/contract.mjs",
+    "test:rust": "cargo test --release",
+    "test:js": "node test/contract.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "wasm-pack": "^0.15.0"
+  }
 }
