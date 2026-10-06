@@ -1,4 +1,8 @@
 {
+  "testEnvironment": "node",
+  "collectCoverageFrom": [
+    "src/**/*.ts"
+  ],
   "coverageReporters": [
     "text-summary",
     "html"

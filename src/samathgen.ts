@@ -15,11 +15,12 @@ export const mathGen = (
   answer: number,
   quizOptions: Array<number>
 } => {
-  const answer = more?.answer ? more.answer : genNumber(10, 20);
+  // `more.answer ? ... : ...` threw away an explicit answer of 0.
+  const answer = more?.answer ?? genNumber(10, 20);
   const expression: Array<number | Operators | string> = genExpression(answer, length);
   if (more?.brackets) {
-    const evenInds = Array.from(Array(expression.length).keys()).filter(i => i % 2 == 0)
-    let randInd = evenInds[genNumber(0, evenInds.length - 1)];
+    const evenInds = Array.from(Array(expression.length).keys()).filter(i => i % 2 === 0);
+    const randInd = evenInds[genNumber(0, evenInds.length - 1)];
     const bracketsEx = genExpression(
       expression[randInd] as number,
       genNumber(2, 3)

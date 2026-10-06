@@ -5,7 +5,10 @@
   "main": "dist/samathgen.js",
   "scripts": {
     "build": "tsc",
-    "test": "jest --config jest.json --coverage"
+    "typecheck": "tsc --noEmit",
+    "test": "jest --config jest.json --coverage",
+    "audit:contract": "node scripts/contract-audit.cjs",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "math",
@@ -18,24 +21,27 @@
     "url": "https://azer.is-a.dev"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.16.11",
-    "@babel/preset-typescript": "^7.16.7",
-    "typescript": "^4.5.4",
-    "ts-node": "^10.5.0",
-    "@types/jest": "^27.4.0",
-    "jest": "^27.5.1"
+    "@babel/preset-env": "^7.28.3",
+    "@babel/preset-typescript": "^7.27.1",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Sadykhzadeh/mathgen.git"
   },
-  "license": "GNU General Public License v3.0",
+  "license": "GPL-3.0-or-later",
   "homepage": "https://samathgen.js.org/",
   "bugs": {
     "url": "https://github.com/Sadykhzadeh/mathgen/issues"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.3.0"
-  }
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "types": "dist/samathgen.d.ts",
+  "files": [
+    "dist"
+  ]
 }

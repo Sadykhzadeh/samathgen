@@ -48,11 +48,17 @@ export const genExpression = (
       ];
   }
 
-  for (let i = 2; i <= returnExpression.length; i += 2) {
-    if (returnExpression[i] < 0) {
-      if (returnExpression[i - 1] == "+") returnExpression[i - 1] = "-";
-      if (returnExpression[i - 1] == "-") returnExpression[i - 1] = "+";
-      returnExpression[i] = -returnExpression[i];
+  for (let i = 2; i < returnExpression.length; i += 2) {
+    const operand = returnExpression[i];
+    // Narrowing the operand first: the array holds operators too, and
+    // comparing or negating that union is not sound.
+    if (typeof operand === "number" && operand < 0) {
+      // These used to be two sequential ifs, which undid each other - "+"
+      // became "-" and was then turned straight back into "+", while the
+      // operand had already been negated. "a + -5" came out as "a + 5".
+      if (returnExpression[i - 1] === "+") returnExpression[i - 1] = "-";
+      else if (returnExpression[i - 1] === "-") returnExpression[i - 1] = "+";
+      returnExpression[i] = -operand;
     }
   }
   return returnExpression;
