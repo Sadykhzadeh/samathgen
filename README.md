@@ -22,6 +22,7 @@
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
 - [Usage](#usage)
+- [Known limitation](#known-limitation)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -101,6 +102,24 @@ console.log(expression);
   quizOptions: [ 41, 40, 38, 30 ]
 }
 ```
+
+## Known limitation
+
+`mathGen` builds a task by replacing an operand with a sub-expression of the
+same value, but it splices that sub-expression in without parentheses. When
+operator precedence differs across the splice the value changes, so the task
+no longer evaluates to the reported `answer`. Measured over 20 000 samples:
+
+```
+npm run build && npm run audit:contract
+# task does not evaluate to the reported answer: ~6.2%
+```
+
+That is also why `npm test`, which asserts `eval(task) === answer` on twenty
+random tasks, fails on roughly two runs in three. Fixing it properly means
+reworking `genExpression` and `genValidOperator` to parenthesise by
+precedence, which changes the shape of every generated task - so it is
+recorded here rather than hidden.
 
 ## Contributing
 
