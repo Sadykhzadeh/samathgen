@@ -97,7 +97,7 @@ Returns:
 | `quizOptions` | `number[]` | Four options including the answer, shuffled. Empty unless `quizMode`. |
 
 **`task.join('')` always evaluates to `answer`.** That is the contract, and it
-is checked over 200 000 generated tasks on every build.
+is checked over 200 000 generated tasks per entry point on every build.
 
 Note that brackets can appear even with `brackets: false`, wherever operator
 precedence requires them. The alternative would be a task that does not
@@ -147,7 +147,9 @@ npm test               # cargo test, then the JavaScript contract suite
 ```
 
 `cargo test` alone exercises the generator natively, with an expression parser
-written independently of the renderer so the two have to agree.
+written independently of the renderer so the two have to agree. The contract
+suite then runs against both entry points, loading the browser one under Node
+from the built bytes, and checks that the two give the same task for a seed.
 
 ## Contributing
 
