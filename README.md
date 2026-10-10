@@ -134,20 +134,23 @@ suite — twenty random cases — failed on roughly two runs in three.
 A call used to hand its result to JavaScript as a JSON string, and that cost
 more than building the task: formatting the string in Rust, decoding it on the
 other side and running `JSON.parse` over it. The result now crosses as a short
-array of integers that the wrapper turns into the same object. A given seed
-produces exactly the same task as before.
+array of integers that the wrapper turns into the same object. Building the
+tree no longer allocates on every split either. A given seed produces exactly
+the same task as before both changes.
 
-Lengths cycling through 2..8 with quiz options on, Node 24, all three run in
-turn in one process, best of 15 runs of 50 000 tasks:
+Lengths cycling through 2..8 with quiz options on, Node 24. Every version runs
+in turn in one process and is timed by the CPU time it used, best of 11 runs
+of 400 000 tasks:
 
-| Version | per task | tasks/s |
+| Version | per task | with brackets |
 | --- | --- | --- |
-| 0.1.3, TypeScript | 1.14 µs | 874 000 |
-| 1.0, result as JSON | 2.78 µs | 360 000 |
-| 1.0, result as integers | 1.28 µs | 779 000 |
+| 0.1.3, TypeScript | 1.01 µs | 1.79 µs |
+| 1.0, result as JSON | 2.31 µs | 2.54 µs |
+| 1.0, result as integers | 1.09 µs | 1.21 µs |
+| 1.0, no allocation per split | 0.90 µs | 1.05 µs |
 
-The WebAssembly shrank with it, from 26 545 to 22 359 bytes (10 600
-gzipped), because nothing formats text any more.
+The WebAssembly shrank with it, from 26 545 to 21 889 bytes (12 359 to
+10 420 gzipped), because nothing formats text any more.
 
 `npm run bench` prints the figures for your machine.
 
