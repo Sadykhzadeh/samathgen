@@ -26,6 +26,9 @@ const DEFAULT_ANSWER_HIGH: i64 = 20;
 /// `+ - * / ( )` travel as `SYMBOL_BASE + 0..=5`, in that order.
 pub const SYMBOL_BASE: i32 = 1 << 24;
 
+/// In `allowed`, next to one bit per operator: no negative numbers.
+const NO_NEGATIVES: u32 = 1 << 4;
+
 fn code(token: Token) -> i32 {
     match token {
         // Within ±MAX_ABS by construction, so the cast is exact.
@@ -39,11 +42,12 @@ fn code(token: Token) -> i32 {
 /// Produces `[answer, option count, options..., token count, tokens...]`.
 ///
 /// `seed` makes a run reproducible. The JavaScript wrapper draws one when the
-/// caller does not supply it. `operators` has bit `1 << n` set for each of
-/// `+ - * /` allowed, in that order.
+/// caller does not supply it. `allowed` has bit `1 << n` set for each of
+/// `+ - * /` the task may use, in that order, and `NO_NEGATIVES` to keep
+/// every number in it at 0 or above.
 ///
-/// An empty array means the operators cannot build a task of that length
-/// for that answer; see `expr::generate`.
+/// An empty array means those rules cannot build a task of that length for
+/// that answer; see `expr::generate`.
 #[wasm_bindgen]
 pub fn generate(
     length: u32,
@@ -51,7 +55,7 @@ pub fn generate(
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
-    operators: u32,
+    allowed: u32,
     seed: f64,
 ) -> Vec<i32> {
     let mut out = Vec::with_capacity(64);
@@ -61,7 +65,8 @@ pub fn generate(
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(operators).unwrap_or(Ops::ALL),
+        ops: Ops::from_bits(allowed & !NO_NEGATIVES).unwrap_or(Ops::ALL),
+        negatives: allowed & NO_NEGATIVES == 0,
     };
     write_task(
         &mut out,
@@ -85,7 +90,7 @@ pub fn generate_batch(
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
-    operators: u32,
+    allowed: u32,
     seed: f64,
 ) -> Vec<i32> {
     let mut out = Vec::with_capacity(count as usize * 24);
@@ -96,7 +101,8 @@ pub fn generate_batch(
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(operators).unwrap_or(Ops::ALL),
+        ops: Ops::from_bits(allowed & !NO_NEGATIVES).unwrap_or(Ops::ALL),
+        negatives: allowed & NO_NEGATIVES == 0,
     };
     let seed = seed.abs() as u64;
     for i in 0..count {
@@ -114,6 +120,7 @@ struct Request {
     brackets: bool,
     quiz_mode: bool,
     ops: Ops,
+    negatives: bool,
 }
 
 /// Appends one task to `out`, or returns false and appends nothing when the
@@ -126,6 +133,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         brackets,
         quiz_mode,
         ops,
+        negatives,
     } = *request;
     let mut rng = Rng::new(seed);
 
@@ -147,6 +155,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
             length: length as usize,
             brackets,
             ops,
+            negatives,
         },
         &mut rng,
         tokens,
@@ -165,7 +174,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     );
 
     let quiz = if quiz_mode {
-        options::quiz_options(answer, &mut rng)
+        options::quiz_options(answer, if negatives { i64::MIN } else { 0 }, &mut rng)
     } else {
         Vec::new()
     };

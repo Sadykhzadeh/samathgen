@@ -272,6 +272,46 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(3, { operators: '+-' }), TypeError)
   })
 
+  check('negatives: false keeps every number and option at 0 or above', () => {
+    const symbols = ['+', '-', '*', '/']
+    for (let bits = 1; bits < 16; bits++) {
+      const operators = symbols.filter((_, i) => bits & (1 << i))
+      for (let seed = 0; seed < 150; seed++) {
+        const length = 2 + (seed % 5)
+        const more = { operators, seed, negatives: false, quizMode: true, brackets: seed % 2 === 0 }
+        // `+` alone needs at least one unit of answer per term.
+        if (bits === 1) more.answer = 10 + (seed % 20)
+        const result = mathGen(length, more)
+        const text = result.task.join('')
+        assert.ok(result.task.every((t) => typeof t !== 'number' || t >= 0), text)
+        assert.ok(result.quizOptions.every((o) => o >= 0), `${result.quizOptions} for ${text}`)
+        // eslint-disable-next-line no-eval
+        assert.equal(eval(text), result.answer, text)
+      }
+    }
+    for (const task of mathGenBatch(500, 8, { negatives: false, answer: 0, seed: 1 })) {
+      assert.ok(task.task.every((t) => typeof t !== 'number' || t >= 0), task.task.join(''))
+    }
+  })
+
+  check('negatives are only ruled out by an explicit false', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const plain = mathGen(6, { seed, quizMode: true })
+      assert.deepEqual(mathGen(6, { seed, quizMode: true, negatives: true }), plain)
+      assert.deepEqual(mathGen(6, { seed, quizMode: true, negatives: 0 }), plain)
+    }
+    const all = mathGenBatch(500, 6, { seed: 1 }).flatMap((r) => r.task)
+    assert.ok(all.some((t) => typeof t === 'number' && t < 0), 'no negative number in 500 tasks')
+  })
+
+  check('negatives: false refuses what it cannot build', () => {
+    assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
+    assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)
+    assert.throws(() => mathGen(5, { answer: 3, negatives: false, operators: ['+'] }), /5 terms evaluating to 3/)
+    assert.throws(() => mathGenBatch(2, 20, { negatives: false, operators: ['+'] }), /an answer from 10 to 20/)
+    assert.equal(mathGen(5, { answer: 5, negatives: false, operators: ['+'], seed: 2 }).task.join(''), '1+1+1+1+1')
+  })
+
   check('the CLI wire format still parses', () => {
     // SaMathAPI sends "<task> <opt1>,<opt2>,<opt3>,<opt4> <answer>" and
     // SaMathCLI splits it on spaces and commas, so no token may contain either.

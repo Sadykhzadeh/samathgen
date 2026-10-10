@@ -23,6 +23,10 @@ export interface MathGenOptions {
    *  combinations that cannot build a task: an answer of 0 without `+` or
    *  `-`, and an answer past 5000 either side with `/` alone. */
   operators?: Operators[]
+  /** Set to false to keep every number, every quiz option and every step of
+   *  working the task out left to right at 0 or above. A negative answer
+   *  then throws a RangeError. Default: true. */
+  negatives?: boolean
   /** Pin the generator, so the same seed gives the same task. A value that
    *  is not a finite number throws a TypeError rather than being ignored.
    *  Default: drawn from Math.random. */
