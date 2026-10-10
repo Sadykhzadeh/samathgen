@@ -1,7 +1,7 @@
 // Node entry point. wasm-pack's nodejs target loads the module synchronously
 // from disk, so this works under plain require() and, through Node's named
 // export detection, under `import { mathGen } from 'samathgen'` as well.
-const { generate_json: generateJson } = require('../dist/node/samathgen.js')
+const { generate } = require('../dist/node/samathgen.js')
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
@@ -9,6 +9,26 @@ const LENGTH_MAX = 32
 // split at all: 1e6 came back as the one-term task "1000000", and 1e300
 // overflowed into a task that evaluated to minus its reported answer.
 const ANSWER_LIMIT = 10000
+
+// The task comes back as integers, not JSON: [answer, option count,
+// options..., token count, tokens...], with + - * / ( ) as SYMBOL_BASE + 0..5.
+// No number in a task reaches SYMBOL_BASE. See src/lib.rs.
+const SYMBOL_BASE = 1 << 24
+const SYMBOLS = ['+', '-', '*', '/', '(', ')']
+
+const decode = (data) => {
+  const optionCount = data[1]
+  const quizOptions = new Array(optionCount)
+  for (let i = 0; i < optionCount; i++) quizOptions[i] = data[2 + i]
+  const at = 3 + optionCount
+  const tokenCount = data[at - 1]
+  const task = new Array(tokenCount)
+  for (let i = 0; i < tokenCount; i++) {
+    const token = data[at + i]
+    task[i] = token >= SYMBOL_BASE ? SYMBOLS[token - SYMBOL_BASE] : token
+  }
+  return { task, answer: data[0], quizOptions }
+}
 
 const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 
@@ -53,7 +73,7 @@ const mathGen = (length, more) => {
   const answer = readAnswer(options.answer)
   const seed = readSeed(options.seed)
 
-  return JSON.parse(generateJson(
+  return decode(generate(
     clampLength(length),
     answer === undefined ? 0 : answer,
     answer !== undefined,

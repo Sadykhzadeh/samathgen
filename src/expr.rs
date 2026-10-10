@@ -25,15 +25,18 @@ const OFFSET_MAX: i64 = 30;
 const DIVISOR_MIN: i64 = 2;
 const DIVISOR_MAX: i64 = 10;
 
+/// The discriminants are the symbol codes handed to JavaScript, after
+/// `SYMBOL_BASE`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
+    Add = 0,
+    Sub = 1,
+    Mul = 2,
+    Div = 3,
 }
 
 impl Op {
+    #[cfg(test)]
     pub fn symbol(self) -> &'static str {
         match self {
             Op::Add => "+",
@@ -70,7 +73,9 @@ pub enum Expr {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Token {
     Num(i64),
-    Sym(&'static str),
+    Op(Op),
+    Open,
+    Close,
 }
 
 enum Visit {
@@ -141,19 +146,20 @@ impl Expr {
         }
     }
 
+    #[cfg(test)]
     pub fn tokens(&self) -> Vec<Token> {
         let mut out = Vec::new();
         self.write(&mut out);
         out
     }
 
-    fn write(&self, out: &mut Vec<Token>) {
+    pub fn write(&self, out: &mut Vec<Token>) {
         match self {
             Expr::Num(n) => {
                 if *n < 0 {
-                    out.push(Token::Sym("("));
+                    out.push(Token::Open);
                     out.push(Token::Num(*n));
-                    out.push(Token::Sym(")"));
+                    out.push(Token::Close);
                 } else {
                     out.push(Token::Num(*n));
                 }
@@ -167,7 +173,7 @@ impl Expr {
                     left.write(out);
                 }
 
-                out.push(Token::Sym(op.symbol()));
+                out.push(Token::Op(*op));
 
                 let right_precedence = right.precedence();
                 let needs_brackets = right_precedence < precedence
@@ -184,9 +190,9 @@ impl Expr {
 }
 
 fn bracket(expr: &Expr, out: &mut Vec<Token>) {
-    out.push(Token::Sym("("));
+    out.push(Token::Open);
     expr.write(out);
-    out.push(Token::Sym(")"));
+    out.push(Token::Close);
 }
 
 /// Only the tests and the doc examples need the task as one string; the
@@ -197,7 +203,9 @@ pub fn render(tokens: &[Token]) -> String {
         .iter()
         .map(|token| match token {
             Token::Num(n) => n.to_string(),
-            Token::Sym(s) => (*s).to_string(),
+            Token::Op(op) => op.symbol().to_string(),
+            Token::Open => "(".to_string(),
+            Token::Close => ")".to_string(),
         })
         .collect()
 }
@@ -331,11 +339,9 @@ pub struct Config {
     pub brackets: bool,
 }
 
-fn has_brackets(expr: &Expr) -> bool {
-    expr.tokens().contains(&Token::Sym("("))
-}
-
-pub fn generate(config: &Config, rng: &mut Rng) -> Expr {
+/// Builds the task and writes its tokens into `tokens`, which the bracket
+/// check needs anyway, so the caller does not render it a second time.
+pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Expr {
     let wanted = config.length.clamp(2, 32);
 
     // `brackets` asks for a shape, not a different answer, so the whole task
@@ -356,18 +362,29 @@ pub fn generate(config: &Config, rng: &mut Rng) -> Expr {
                 continue;
             }
         }
-        if !config.brackets || has_brackets(&expr) {
+        tokens.clear();
+        expr.write(tokens);
+        if !config.brackets || tokens.contains(&Token::Open) {
             return expr;
         }
         last = Some(expr);
     }
 
+    // `tokens` still holds the last attempt, which is the one returned.
     last.unwrap_or(Expr::Num(config.answer))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn build(config: &Config, rng: &mut Rng) -> Expr {
+        generate(config, rng, &mut Vec::new())
+    }
+
+    fn has_brackets(expr: &Expr) -> bool {
+        expr.tokens().contains(&Token::Open)
+    }
 
     /// A parser written independently of the renderer: if the two agree on
     /// thousands of random tasks, the brackets are in the right places. The
@@ -392,13 +409,13 @@ mod tests {
 
         fn sum(&mut self) -> i64 {
             let mut value = self.product();
-            while let Some(Token::Sym(s)) = self.peek() {
-                match s {
-                    "+" => {
+            while let Some(Token::Op(op)) = self.peek() {
+                match op {
+                    Op::Add => {
                         self.at += 1;
                         value += self.product();
                     }
-                    "-" => {
+                    Op::Sub => {
                         self.at += 1;
                         value -= self.product();
                     }
@@ -410,13 +427,13 @@ mod tests {
 
         fn product(&mut self) -> i64 {
             let mut value = self.atom();
-            while let Some(Token::Sym(s)) = self.peek() {
-                match s {
-                    "*" => {
+            while let Some(Token::Op(op)) = self.peek() {
+                match op {
+                    Op::Mul => {
                         self.at += 1;
                         value *= self.atom();
                     }
-                    "/" => {
+                    Op::Div => {
                         self.at += 1;
                         let divisor = self.atom();
                         assert_ne!(divisor, 0, "division by zero in {:?}", self.tokens);
@@ -440,10 +457,10 @@ mod tests {
                     self.at += 1;
                     n
                 }
-                Some(Token::Sym("(")) => {
+                Some(Token::Open) => {
                     self.at += 1;
                     let value = self.sum();
-                    assert_eq!(self.peek(), Some(Token::Sym(")")), "unclosed bracket");
+                    assert_eq!(self.peek(), Some(Token::Close), "unclosed bracket");
                     self.at += 1;
                     value
                 }
@@ -454,7 +471,7 @@ mod tests {
 
     fn check(answer: i64, length: usize, brackets: bool, seed: u64) {
         let mut rng = Rng::new(seed);
-        let expr = generate(
+        let expr = build(
             &Config {
                 answer,
                 length,
@@ -527,7 +544,7 @@ mod tests {
     #[test]
     fn an_explicit_answer_of_zero_is_kept() {
         let mut rng = Rng::new(5);
-        let expr = generate(
+        let expr = build(
             &Config {
                 answer: 0,
                 length: 3,
@@ -543,7 +560,7 @@ mod tests {
         let mut produced = 0;
         for seed in 0..400 {
             let mut rng = Rng::new(seed);
-            let expr = generate(
+            let expr = build(
                 &Config {
                     answer: 24,
                     length: 5,
@@ -565,7 +582,7 @@ mod tests {
     fn no_leaf_is_zero_unless_the_answer_forces_it() {
         for seed in 0..2000 {
             let mut rng = Rng::new(seed);
-            let expr = generate(
+            let expr = build(
                 &Config {
                     answer: 12,
                     length: 6,
@@ -588,8 +605,8 @@ mod tests {
             length: 5,
             brackets: true,
         };
-        let first = render(&generate(&config, &mut Rng::new(99)).tokens());
-        let second = render(&generate(&config, &mut Rng::new(99)).tokens());
+        let first = render(&build(&config, &mut Rng::new(99)).tokens());
+        let second = render(&build(&config, &mut Rng::new(99)).tokens());
         assert_eq!(first, second);
     }
 

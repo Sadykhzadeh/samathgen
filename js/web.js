@@ -2,7 +2,7 @@
 // synchronously on a browser's main thread, so `init()` has to be awaited
 // once before mathGen can be called. Node callers get the synchronous
 // loader instead and need none of this.
-import initWasm, { generate_json as generateJson } from '../dist/web/samathgen.js'
+import initWasm, { generate } from '../dist/web/samathgen.js'
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
@@ -10,6 +10,26 @@ const LENGTH_MAX = 32
 // split at all. The same rules as js/node.cjs; test/contract.mjs holds the
 // two entry points to the same output.
 const ANSWER_LIMIT = 10000
+
+// The task comes back as integers, not JSON: [answer, option count,
+// options..., token count, tokens...], with + - * / ( ) as SYMBOL_BASE + 0..5.
+// No number in a task reaches SYMBOL_BASE. See src/lib.rs.
+const SYMBOL_BASE = 1 << 24
+const SYMBOLS = ['+', '-', '*', '/', '(', ')']
+
+const decode = (data) => {
+  const optionCount = data[1]
+  const quizOptions = new Array(optionCount)
+  for (let i = 0; i < optionCount; i++) quizOptions[i] = data[2 + i]
+  const at = 3 + optionCount
+  const tokenCount = data[at - 1]
+  const task = new Array(tokenCount)
+  for (let i = 0; i < tokenCount; i++) {
+    const token = data[at + i]
+    task[i] = token >= SYMBOL_BASE ? SYMBOLS[token - SYMBOL_BASE] : token
+  }
+  return { task, answer: data[0], quizOptions }
+}
 
 let loading = null
 
@@ -59,7 +79,7 @@ export const mathGen = (length, more) => {
   const answer = readAnswer(options.answer)
   const seed = readSeed(options.seed)
 
-  return JSON.parse(generateJson(
+  return decode(generate(
     clampLength(length),
     answer === undefined ? 0 : answer,
     answer !== undefined,

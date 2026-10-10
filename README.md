@@ -131,14 +131,25 @@ suite — twenty random cases — failed on roughly two runs in three.
 
 ### On speed
 
-The rewrite is not a performance win and was not meant as one. Measured over
-50 000 tasks on Node 24, generation runs at about 440 000 tasks/s against the
-old TypeScript version's 1 090 000 — roughly **2.5× slower**, because the work
-per call is tiny next to the cost of crossing the WebAssembly boundary (that
-accounts for 85% of the time; `JSON.parse` of the result is the other 15%).
-At one task per request this is not a number anybody will notice. What the
-rewrite buys is the correctness guarantee above, reproducible output from a
-seed, and no dependencies.
+A call used to hand its result to JavaScript as a JSON string, and that cost
+more than building the task: formatting the string in Rust, decoding it on the
+other side and running `JSON.parse` over it. The result now crosses as a short
+array of integers that the wrapper turns into the same object. A given seed
+produces exactly the same task as before.
+
+Lengths cycling through 2..8 with quiz options on, Node 24, all three run in
+turn in one process, best of 15 runs of 50 000 tasks:
+
+| Version | per task | tasks/s |
+| --- | --- | --- |
+| 0.1.3, TypeScript | 1.14 µs | 874 000 |
+| 1.0, result as JSON | 2.78 µs | 360 000 |
+| 1.0, result as integers | 1.28 µs | 779 000 |
+
+The WebAssembly shrank with it, from 26 545 to 22 359 bytes (10 600
+gzipped), because nothing formats text any more.
+
+`npm run bench` prints the figures for your machine.
 
 ## Building from source
 
