@@ -102,6 +102,7 @@ impl Expr {
         }
     }
 
+    #[cfg(test)]
     pub fn leaf_count(&self) -> usize {
         match self {
             Expr::Num(_) => 1,
@@ -210,54 +211,67 @@ pub fn render(tokens: &[Token]) -> String {
         .collect()
 }
 
+/// No number up to MAX_ABS has more divisors than this: 7560 and 9240
+/// have 64.
+const MAX_DIVISORS: usize = 64;
+
 /// Divisors of `|value|` worth using, which is everything but 1 and the
 /// value itself - `1 * 12` and `12 * 1` are not a multiplication exercise.
 /// For a prime there is nothing else, so those come back as the fallback.
-fn useful_divisors(value: i64) -> Vec<i64> {
+///
+/// Written into `out`, smallest of each pair first, and the count returned:
+/// this runs on every multiplication, and a pair of fresh vectors each time
+/// cost more than the arithmetic.
+fn useful_divisors(value: i64, out: &mut [i64; MAX_DIVISORS]) -> usize {
     let magnitude = value.abs();
-    let mut interesting = Vec::new();
-    let mut trivial = Vec::new();
-    let mut d = 1;
+    debug_assert!(magnitude <= MAX_ABS);
+    let mut count = 0;
+    let mut d = 2;
     while d * d <= magnitude {
         if magnitude % d == 0 {
+            out[count] = d;
+            count += 1;
             let other = magnitude / d;
-            for candidate in [d, other] {
-                if candidate == 1 || candidate == magnitude {
-                    if !trivial.contains(&candidate) {
-                        trivial.push(candidate);
-                    }
-                } else if !interesting.contains(&candidate) {
-                    interesting.push(candidate);
-                }
+            if other != d {
+                out[count] = other;
+                count += 1;
             }
         }
         d += 1;
     }
-    if interesting.is_empty() {
-        trivial
-    } else {
-        interesting
+    if count == 0 {
+        out[0] = 1;
+        count = 1;
+        if magnitude != 1 {
+            out[1] = magnitude;
+            count = 2;
+        }
     }
+    count
 }
 
 /// Picks `(a, op, b)` such that `a op b == value` exactly, or `None` when
 /// this value cannot be split within the bounds above.
 fn split_value(value: i64, rng: &mut Rng) -> Option<(i64, Op, i64)> {
-    let mut candidates: Vec<Op> = vec![Op::Add, Op::Sub];
+    let mut candidates = [Op::Add, Op::Sub, Op::Mul, Op::Div];
+    let mut count = 2;
     // 0 * anything and 0 / anything are degenerate: the other operand carries
     // no constraint, which is how the old generator ended up emitting
     // "1*3*2*0+0*0*0*0..." for a large length.
     if value != 0 {
         if value.abs() <= MAX_ABS {
-            candidates.push(Op::Mul);
+            candidates[count] = Op::Mul;
+            count += 1;
         }
         if value.abs() * DIVISOR_MIN <= MAX_ABS {
-            candidates.push(Op::Div);
+            candidates[count] = Op::Div;
+            count += 1;
         }
     }
 
-    rng.shuffle(&mut candidates);
-    for op in candidates {
+    let candidates = &mut candidates[..count];
+    rng.shuffle(candidates);
+    for &op in candidates.iter() {
         if let Some(split) = try_split(value, op, rng) {
             return Some(split);
         }
@@ -304,11 +318,9 @@ fn try_split(value: i64, op: Op, rng: &mut Rng) -> Option<(i64, Op, i64)> {
                 (value + right, Op::Sub, right)
             }
             Op::Mul => {
-                let divisors = useful_divisors(value);
-                if divisors.is_empty() {
-                    return None;
-                }
-                let left = *rng.pick(&divisors) * occasionally_negative(rng);
+                let mut divisors = [0; MAX_DIVISORS];
+                let count = useful_divisors(value, &mut divisors);
+                let left = *rng.pick(&divisors[..count]) * occasionally_negative(rng);
                 if left == 0 || value % left != 0 {
                     continue;
                 }
@@ -353,13 +365,14 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Expr
 
     for _ in 0..attempts {
         let mut expr = Expr::Num(config.answer);
+        // Counted as it grows rather than walked for on every step.
+        let mut leaves = 1;
         let mut guard = 0;
-        while expr.leaf_count() < wanted && guard < wanted * 64 {
+        while leaves < wanted && guard < wanted * 64 {
             guard += 1;
-            let leaves = expr.leaf_count();
             let mut index = rng.below(leaves as u64) as usize;
             if let Visit::Split = expr.split_nth_leaf(&mut index, rng) {
-                continue;
+                leaves += 1;
             }
         }
         tokens.clear();
@@ -524,6 +537,45 @@ mod tests {
                     check(answer, length, seed % 2 == 0, seed);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn divisors_come_out_in_the_order_the_draws_depend_on() {
+        // The straightforward definition, in the order a seed has always
+        // picked from: each pair as it is found, smallest first.
+        fn reference(value: i64) -> Vec<i64> {
+            let magnitude = value.abs();
+            let mut interesting = Vec::new();
+            let mut trivial = Vec::new();
+            for d in (1..).take_while(|d| d * d <= magnitude) {
+                if magnitude % d == 0 {
+                    for candidate in [d, magnitude / d] {
+                        let list = if candidate == 1 || candidate == magnitude {
+                            &mut trivial
+                        } else {
+                            &mut interesting
+                        };
+                        if !list.contains(&candidate) {
+                            list.push(candidate);
+                        }
+                    }
+                }
+            }
+            if interesting.is_empty() {
+                trivial
+            } else {
+                interesting
+            }
+        }
+
+        let mut out = [0; MAX_DIVISORS];
+        for value in -MAX_ABS..=MAX_ABS {
+            if value == 0 {
+                continue;
+            }
+            let count = useful_divisors(value, &mut out);
+            assert_eq!(&out[..count], reference(value).as_slice(), "{value}");
         }
     }
 
