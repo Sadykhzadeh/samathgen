@@ -50,6 +50,7 @@
     "test": "cargo test --release && node test/contract.mjs",
     "test:rust": "cargo test --release",
     "test:js": "node test/contract.mjs",
+    "bench": "node bench/throughput.mjs",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
