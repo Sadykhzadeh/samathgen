@@ -19,7 +19,9 @@ const clampLength = (length) => {
 /** Loads the wasm module. Safe to call more than once; the same promise
  *  is handed back. Pass a URL or a Response to override where it loads from. */
 export const init = (input) => {
-  loading = loading || initWasm(input)
+  // wasm-bindgen takes the override wrapped in an object now, and logs a
+  // deprecation warning for every bare argument it is still handed.
+  loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input })
   return loading
 }
 
