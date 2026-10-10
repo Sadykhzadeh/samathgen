@@ -71,8 +71,12 @@ pub fn generate_json(
 
     let answer = if use_answer {
         // `more.answer ? more.answer : random` discarded an explicit 0; this
-        // takes the caller at their word.
-        answer.round() as i64
+        // takes the caller at their word. The wrappers have already turned
+        // away anything past MAX_ABS, where no split fits and an f64 past
+        // i64 would saturate and then wrap.
+        let answer = answer.round() as i64;
+        assert!(answer.abs() <= expr::MAX_ABS, "answer out of range");
+        answer
     } else {
         rng.range(DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
     };

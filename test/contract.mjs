@@ -89,6 +89,37 @@ const suite = (mathGen) => {
     }
   })
 
+  check('the ends of the answer range get every term asked for', () => {
+    for (const answer of [-10000, 10000]) {
+      for (let seed = 0; seed < 100; seed++) {
+        const result = mathGen(32, { answer, seed, brackets: seed % 2 === 0 })
+        const text = result.task.join('')
+        assert.equal(result.task.filter((t) => typeof t === 'number').length, 32, text)
+        // eslint-disable-next-line no-eval
+        assert.equal(eval(text), answer, text)
+      }
+    }
+  })
+
+  check('an answer it cannot build is refused, not mangled', () => {
+    // 1e6 used to come back as the one-term task "1000000", and 1e300 as a
+    // task that evaluated to minus its own answer.
+    for (const answer of [10001, -10001, 1e6, 1e300, 2.5, NaN, Infinity]) {
+      assert.throws(() => mathGen(4, { answer }), RangeError, `answer ${answer}`)
+    }
+    for (const answer of ['12', {}, true]) {
+      assert.throws(() => mathGen(4, { answer }), TypeError, `answer ${JSON.stringify(answer)}`)
+    }
+    assert.ok(mathGen(4, { answer: null, seed: 1 }).answer >= 10)
+  })
+
+  check('a seed that is not a number is refused rather than ignored', () => {
+    for (const seed of ['42', NaN, Infinity, {}]) {
+      assert.throws(() => mathGen(4, { seed }), TypeError, `seed ${String(seed)}`)
+    }
+    assert.equal(typeof mathGen(4, { seed: null }).answer, 'number')
+  })
+
   check('without an answer one is drawn from 10..20', () => {
     for (let seed = 1; seed <= 2000; seed++) {
       const { answer } = mathGen(3, { seed })

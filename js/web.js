@@ -6,6 +6,10 @@ import initWasm, { generate_json as generateJson } from '../dist/web/samathgen.j
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
+// Every number in a task stays within this, so an answer past it cannot be
+// split at all. The same rules as js/node.cjs; test/contract.mjs holds the
+// two entry points to the same output.
+const ANSWER_LIMIT = 10000
 
 let loading = null
 
@@ -14,6 +18,25 @@ const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 const clampLength = (length) => {
   if (!Number.isFinite(length)) return LENGTH_MIN
   return Math.min(Math.max(Math.trunc(length), LENGTH_MIN), LENGTH_MAX)
+}
+
+const readAnswer = (answer) => {
+  if (answer === undefined || answer === null) return undefined
+  if (typeof answer !== 'number') {
+    throw new TypeError(`answer must be a number, got ${typeof answer}`)
+  }
+  if (!Number.isInteger(answer) || Math.abs(answer) > ANSWER_LIMIT) {
+    throw new RangeError(`answer must be a whole number from -${ANSWER_LIMIT} to ${ANSWER_LIMIT}, got ${answer}`)
+  }
+  return answer
+}
+
+const readSeed = (seed) => {
+  if (seed === undefined || seed === null) return drawSeed()
+  if (typeof seed !== 'number' || !Number.isFinite(seed)) {
+    throw new TypeError(`seed must be a finite number, got ${typeof seed === 'number' ? seed : typeof seed}`)
+  }
+  return Math.abs(Math.trunc(seed))
 }
 
 /** Loads the wasm module. Safe to call more than once; the same promise
@@ -33,15 +56,13 @@ export const init = (input) => {
  */
 export const mathGen = (length, more) => {
   const options = more || {}
-  const hasAnswer = Number.isFinite(options.answer)
-  const seed = Number.isFinite(options.seed)
-    ? Math.abs(Math.trunc(options.seed))
-    : drawSeed()
+  const answer = readAnswer(options.answer)
+  const seed = readSeed(options.seed)
 
   return JSON.parse(generateJson(
     clampLength(length),
-    hasAnswer ? options.answer : 0,
-    hasAnswer,
+    answer === undefined ? 0 : answer,
+    answer !== undefined,
     options.brackets === true,
     options.quizMode === true,
     seed
