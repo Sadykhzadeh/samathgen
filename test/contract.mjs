@@ -14,8 +14,8 @@
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mathGen as nodeMathGen } from '../js/node.cjs'
-import { init, mathGen as webMathGen } from '../js/web.js'
+import { mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch } from '../js/node.cjs'
+import { init, mathGen as webMathGen, mathGenBatch as webMathGenBatch } from '../js/web.js'
 
 const SAMPLES = Number(process.argv[2] || 200_000)
 
@@ -34,7 +34,7 @@ const check = (name, fn) => {
   }
 }
 
-const suite = (mathGen) => {
+const suite = (mathGen, mathGenBatch) => {
   check(`eval(task) === answer over ${SAMPLES.toLocaleString('en-US')} tasks`, () => {
     const examples = []
     let wrong = 0
@@ -191,6 +191,46 @@ const suite = (mathGen) => {
     }
   })
 
+  check('task i of a batch is the task mathGen gives for seed + i', () => {
+    const shapes = [
+      [1, 2, {}],
+      [25, 4, { quizMode: true }],
+      [40, 7, { brackets: true, answer: -12 }],
+      [10, 32, { quizMode: true, brackets: true, answer: 0 }],
+    ]
+    for (const [count, length, more] of shapes) {
+      for (const seed of [0, 1, 99, 123456789]) {
+        const batch = mathGenBatch(count, length, { ...more, seed })
+        assert.equal(batch.length, count)
+        batch.forEach((task, i) => {
+          assert.deepEqual(task, mathGen(length, { ...more, seed: seed + i }), `task ${i} from seed ${seed}`)
+        })
+      }
+    }
+  })
+
+  check(`a batch keeps the contract too, ${(SAMPLES / 10).toLocaleString('en-US')} tasks`, () => {
+    let wrong = 0
+    for (let i = 0; i < SAMPLES / 1000; i++) {
+      for (const result of mathGenBatch(100, 2 + (i % 7), { brackets: i % 2 === 0, quizMode: true })) {
+        // eslint-disable-next-line no-eval
+        if (eval(result.task.join('')) !== result.answer) wrong++
+        assert.ok(result.quizOptions.includes(result.answer))
+      }
+    }
+    assert.equal(wrong, 0)
+  })
+
+  check('a batch count outside 0..10000 is refused', () => {
+    assert.deepEqual(mathGenBatch(0, 4), [])
+    assert.equal(mathGenBatch(10000, 2, { seed: 1 }).length, 10000)
+    for (const count of [-1, 1.5, 10001, NaN, '3', undefined]) {
+      assert.throws(() => mathGenBatch(count, 4), RangeError, `count ${String(count)}`)
+    }
+    assert.throws(() => mathGenBatch(3, 4, { answer: 1e6 }), RangeError)
+    assert.throws(() => mathGenBatch(3, 4, { seed: '1' }), TypeError)
+  })
+
   check('the CLI wire format still parses', () => {
     // SaMathAPI sends "<task> <opt1>,<opt2>,<opt3>,<opt4> <answer>" and
     // SaMathCLI splits it on spaces and commas, so no token may contain either.
@@ -211,7 +251,7 @@ console.log('\nnode entry point')
 check('named import works from ESM', () => {
   assert.equal(typeof nodeMathGen, 'function')
 })
-suite(nodeMathGen)
+suite(nodeMathGen, nodeMathGenBatch)
 
 console.log('\nbrowser entry point')
 const warnings = []
@@ -222,7 +262,7 @@ console.warn = warn
 check('init() takes the module bytes without complaint', () => {
   assert.deepEqual(warnings, [])
 })
-suite(webMathGen)
+suite(webMathGen, webMathGenBatch)
 
 console.log('\nboth')
 check('the same seed gives the same task from either entry point', () => {
@@ -232,6 +272,8 @@ check('the same seed gives the same task from either entry point', () => {
     const length = 2 + (seed % 9)
     assert.deepEqual(webMathGen(length, more), nodeMathGen(length, more), `seed ${seed}`)
   }
+  const more = { seed: 7, quizMode: true, brackets: true }
+  assert.deepEqual(webMathGenBatch(500, 6, more), nodeMathGenBatch(500, 6, more), 'batch')
 })
 
 console.log(`\n${checks} passed, ${failures} failed`)

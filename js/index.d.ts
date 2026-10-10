@@ -41,6 +41,16 @@ export interface MathGenResult {
 export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 
 /**
+ * Builds `count` tasks in a single call into WebAssembly, about twice as fast
+ * per task as calling `mathGen` in a loop. Task `i` is exactly what
+ * `mathGen(length, { ...more, seed: seed + i })` gives.
+ *
+ * `count` must be a whole number from 0 to 10000, or this throws a
+ * RangeError.
+ */
+export function mathGenBatch (count: number, length: number, more?: MathGenOptions): MathGenResult[]
+
+/**
  * Browser entry point only: loads the WebAssembly module. Await it once
  * before calling `mathGen`. Not exported by the Node entry point, which
  * loads the module synchronously.

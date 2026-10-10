@@ -13,7 +13,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 const started = performance.now()
-const { mathGen } = require('../js/node.cjs')
+const { mathGen, mathGenBatch } = require('../js/node.cjs')
 const loadMs = performance.now() - started
 
 const TASKS = 100_000
@@ -43,5 +43,15 @@ measure('mathGen', () => {
 measure('mathGen, brackets', () => {
   for (let i = 0; i < TASKS; i++) sink += mathGen(2 + (i % 7), { quizMode: true, brackets: true }).answer
 })
+
+// A batch has one length for all of its tasks, so each length gets its own
+// share of calls, which keeps the mix of lengths the same as above.
+for (const size of [10, 100, 1000]) {
+  measure(`mathGenBatch, ${size} per call`, () => {
+    for (let i = 0; i < TASKS / size; i++) {
+      for (const task of mathGenBatch(size, 2 + (i % 7), { quizMode: true })) sink += task.answer
+    }
+  })
+}
 
 if (sink === 0.5) console.log(sink)
