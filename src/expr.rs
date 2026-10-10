@@ -151,7 +151,7 @@ impl Expr {
         }
     }
 
-    fn split_nth_leaf(&mut self, index: &mut usize, ops: Ops, rng: &mut Rng) -> Visit {
+    fn split_nth_leaf(&mut self, index: &mut usize, config: &Config, rng: &mut Rng) -> Visit {
         match self {
             Expr::Num(value) => {
                 let current = *value;
@@ -159,7 +159,7 @@ impl Expr {
                     *index -= 1;
                     return Visit::Missed;
                 }
-                match split_value(current, ops, rng) {
+                match split_value(current, config, rng) {
                     Some((left, op, right)) => {
                         *self = Expr::Binary {
                             op,
@@ -171,8 +171,8 @@ impl Expr {
                     None => Visit::Failed,
                 }
             }
-            Expr::Binary { left, right, .. } => match left.split_nth_leaf(index, ops, rng) {
-                Visit::Missed => right.split_nth_leaf(index, ops, rng),
+            Expr::Binary { left, right, .. } => match left.split_nth_leaf(index, config, rng) {
+                Visit::Missed => right.split_nth_leaf(index, config, rng),
                 reached => reached,
             },
         }
@@ -283,12 +283,14 @@ fn useful_divisors(value: i64, out: &mut [i64; MAX_DIVISORS]) -> usize {
 
 /// Picks `(a, op, b)` such that `a op b == value` exactly, or `None` when
 /// this value cannot be split within the bounds above.
-fn split_value(value: i64, ops: Ops, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+fn split_value(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+    let ops = config.ops;
     // 0 * anything and 0 / anything are degenerate: the other operand carries
     // no constraint, which is how the old generator ended up emitting
-    // "1*3*2*0+0*0*0*0..." for a large length.
+    // "1*3*2*0+0*0*0*0..." for a large length. Without negatives, 0 and 1
+    // cannot be a sum either: one of the two terms would be 0 or below.
     let usable = [
-        true,
+        config.negatives || value >= 2,
         true,
         value != 0 && value.abs() <= MAX_ABS,
         value != 0 && value.abs() * DIVISOR_MIN <= MAX_ABS,
@@ -305,7 +307,7 @@ fn split_value(value: i64, ops: Ops, rng: &mut Rng) -> Option<(i64, Op, i64)> {
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
     for &op in candidates.iter() {
-        if let Some(split) = try_split(value, op, rng) {
+        if let Some(split) = try_split(value, op, config.negatives, rng) {
             return Some(split);
         }
     }
@@ -326,10 +328,20 @@ fn occasionally_negative(rng: &mut Rng) -> i64 {
     }
 }
 
-fn try_split(value: i64, op: Op, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+fn try_split(value: i64, op: Op, negatives: bool, rng: &mut Rng) -> Option<(i64, Op, i64)> {
     // The sign that keeps an operand on the same side of zero as the value
     // it came from.
     let toward_value = if value < 0 { -1 } else { 1 };
+    // Without negatives every value split is already 0 or more, so keeping
+    // each operand on its side of zero, and never flipping one, keeps every
+    // number in the task and every node of the tree at 0 or above.
+    let flip = |rng: &mut Rng| {
+        if negatives {
+            occasionally_negative(rng)
+        } else {
+            1
+        }
+    };
 
     // A handful of attempts: the bounds reject some draws, and another draw
     // is cheaper than reasoning about which ones.
@@ -343,24 +355,24 @@ fn try_split(value: i64, op: Op, rng: &mut Rng) -> Option<(i64, Op, i64)> {
                 } else {
                     OFFSET_MAX
                 };
-                let right = rng.range(1, reach.max(1)) * toward_value * occasionally_negative(rng);
+                let right = rng.range(1, reach.max(1)) * toward_value * flip(rng);
                 (value - right, Op::Add, right)
             }
             Op::Sub => {
-                let right = rng.range(1, OFFSET_MAX) * toward_value * occasionally_negative(rng);
+                let right = rng.range(1, OFFSET_MAX) * toward_value * flip(rng);
                 (value + right, Op::Sub, right)
             }
             Op::Mul => {
                 let mut divisors = [0; MAX_DIVISORS];
                 let count = useful_divisors(value, &mut divisors);
-                let left = *rng.pick(&divisors[..count]) * occasionally_negative(rng);
+                let left = *rng.pick(&divisors[..count]) * flip(rng);
                 if left == 0 || value % left != 0 {
                     continue;
                 }
                 (left, Op::Mul, value / left)
             }
             Op::Div => {
-                let right = rng.range(DIVISOR_MIN, DIVISOR_MAX) * occasionally_negative(rng);
+                let right = rng.range(DIVISOR_MIN, DIVISOR_MAX) * flip(rng);
                 let left = value.checked_mul(right)?;
                 (left, Op::Div, right)
             }
@@ -373,6 +385,9 @@ fn try_split(value: i64, op: Op, rng: &mut Rng) -> Option<(i64, Op, i64)> {
         if left.abs() > MAX_ABS || right.abs() > MAX_ABS {
             continue;
         }
+        if !negatives && (left < 0 || right < 0) {
+            continue;
+        }
         return Some(candidate);
     }
     None
@@ -383,6 +398,9 @@ pub struct Config {
     pub length: usize,
     pub brackets: bool,
     pub ops: Ops,
+    /// When false, no number in the task is negative and neither is any
+    /// step of working it out left to right.
+    pub negatives: bool,
 }
 
 /// Builds the task and writes its tokens into `tokens`, which the bracket
@@ -392,8 +410,16 @@ pub struct Config {
 /// bounds above that happens in two cases only: an answer of 0 with neither
 /// `+` nor `-` (0 cannot be a product or a quotient without a zero in it),
 /// and an answer past `MAX_ABS / 2` with `/` alone.
+///
+/// Without negatives there are more: a negative answer, an answer of 0
+/// without `-`, `+` alone with an answer smaller than the number of terms
+/// (every term is at least 1), and an answer of `MAX_ABS` with neither `+`
+/// nor `*`, since `-` and `/` would both need a first number past it.
 pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
     let wanted = config.length.clamp(2, 32);
+    if !config.negatives && config.answer < 0 {
+        return None;
+    }
 
     // `brackets` asks for a shape, not a different answer, so the whole task
     // is simply drawn again until the shape appears. If it does not after a
@@ -414,7 +440,7 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         while leaves < wanted && guard < wanted * 64 {
             guard += 1;
             let mut index = rng.below(leaves as u64) as usize;
-            if let Visit::Split = expr.split_nth_leaf(&mut index, config.ops, rng) {
+            if let Visit::Split = expr.split_nth_leaf(&mut index, config, rng) {
                 leaves += 1;
             }
         }
@@ -452,13 +478,29 @@ mod tests {
     struct Parser<'a> {
         tokens: &'a [Token],
         at: usize,
+        /// The lowest value met on the way: every number, and every running
+        /// result as the task is worked out left to right.
+        lowest: i64,
     }
 
     impl<'a> Parser<'a> {
         fn parse(tokens: &'a [Token]) -> i64 {
-            let mut parser = Parser { tokens, at: 0 };
+            Parser::parse_with_lowest(tokens).0
+        }
+
+        fn parse_with_lowest(tokens: &'a [Token]) -> (i64, i64) {
+            let mut parser = Parser {
+                tokens,
+                at: 0,
+                lowest: i64::MAX,
+            };
             let value = parser.sum();
             assert_eq!(parser.at, tokens.len(), "trailing tokens in {:?}", tokens);
+            (value, parser.lowest)
+        }
+
+        fn saw(&mut self, value: i64) -> i64 {
+            self.lowest = self.lowest.min(value);
             value
         }
 
@@ -473,10 +515,12 @@ mod tests {
                     Op::Add => {
                         self.at += 1;
                         value += self.product();
+                        self.saw(value);
                     }
                     Op::Sub => {
                         self.at += 1;
                         value -= self.product();
+                        self.saw(value);
                     }
                     _ => break,
                 }
@@ -491,6 +535,7 @@ mod tests {
                     Op::Mul => {
                         self.at += 1;
                         value *= self.atom();
+                        self.saw(value);
                     }
                     Op::Div => {
                         self.at += 1;
@@ -503,6 +548,7 @@ mod tests {
                             self.tokens
                         );
                         value /= divisor;
+                        self.saw(value);
                     }
                     _ => break,
                 }
@@ -514,7 +560,7 @@ mod tests {
             match self.peek() {
                 Some(Token::Num(n)) => {
                     self.at += 1;
-                    n
+                    self.saw(n)
                 }
                 Some(Token::Open) => {
                     self.at += 1;
@@ -536,6 +582,7 @@ mod tests {
                 length,
                 brackets,
                 ops: Ops::ALL,
+                negatives: true,
             },
             &mut rng,
         );
@@ -643,6 +690,7 @@ mod tests {
                             length,
                             brackets: seed % 2 == 0,
                             ops,
+                            negatives: true,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -665,6 +713,68 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn without_negatives_nothing_dips_below_zero() {
+        let only = |op: Op| Ops::from_bits(1 << op as u32).unwrap();
+        for bits in 1..=15 {
+            let ops = Ops::from_bits(bits).unwrap();
+            for answer in [
+                -5, 0, 1, 2, 3, 5, 12, 31, 97, 4999, 5000, 5001, 9973, 9999, MAX_ABS,
+            ] {
+                for length in [2, 3, 5, 8, 16, 32] {
+                    let impossible = answer < 0
+                        || (answer == 0 && !ops.has(Op::Sub))
+                        || (ops == only(Op::Add) && answer < length as i64)
+                        || (answer == MAX_ABS && !ops.has(Op::Add) && !ops.has(Op::Mul))
+                        || (ops == only(Op::Div) && answer > MAX_ABS / 2);
+                    for seed in 0..8 {
+                        let config = Config {
+                            answer,
+                            length,
+                            brackets: seed % 2 == 0,
+                            ops,
+                            negatives: false,
+                        };
+                        let mut tokens = Vec::new();
+                        let built = generate(&config, &mut Rng::new(seed), &mut tokens);
+                        let what = format!("answer {answer}, length {length}, ops {bits:04b}");
+                        let Some(expr) = built else {
+                            assert!(impossible, "refused {what}");
+                            continue;
+                        };
+                        assert!(!impossible, "built {what}");
+                        assert_eq!(expr.leaf_count(), length, "{what}");
+                        let (value, lowest) = Parser::parse_with_lowest(&tokens);
+                        let text = render(&tokens);
+                        assert_eq!(value, answer, "{text} for {what}");
+                        assert!(lowest >= 0, "{text} goes down to {lowest} for {what}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn negatives_appear_unless_they_are_ruled_out() {
+        // The switch must not have turned them off for everyone else.
+        let negative_somewhere = (0..500).any(|seed| {
+            build(
+                &Config {
+                    answer: 12,
+                    length: 6,
+                    brackets: false,
+                    ops: Ops::ALL,
+                    negatives: true,
+                },
+                &mut Rng::new(seed),
+            )
+            .tokens()
+            .iter()
+            .any(|token| matches!(token, Token::Num(n) if *n < 0))
+        });
+        assert!(negative_somewhere);
     }
 
     #[test]
@@ -697,6 +807,7 @@ mod tests {
                 length: 3,
                 brackets: false,
                 ops: Ops::ALL,
+                negatives: true,
             },
             &mut rng,
         );
@@ -714,6 +825,7 @@ mod tests {
                     length: 5,
                     brackets: true,
                     ops: Ops::ALL,
+                    negatives: true,
                 },
                 &mut rng,
             );
@@ -737,6 +849,7 @@ mod tests {
                     length: 6,
                     brackets: false,
                     ops: Ops::ALL,
+                    negatives: true,
                 },
                 &mut rng,
             );
@@ -755,6 +868,7 @@ mod tests {
             length: 5,
             brackets: true,
             ops: Ops::ALL,
+            negatives: true,
         };
         let first = render(&build(&config, &mut Rng::new(99)).tokens());
         let second = render(&build(&config, &mut Rng::new(99)).tokens());

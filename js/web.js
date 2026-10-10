@@ -58,9 +58,11 @@ const readAnswer = (answer) => {
   return answer
 }
 
-// One bit per operator, in the order src/expr.rs numbers them.
+// One bit per operator, in the order src/expr.rs numbers them, and one more
+// for ruling out negative numbers.
 const OPERATORS = '+-*/'
 const ALL_OPERATORS = 0b1111
+const NO_NEGATIVES = 1 << 4
 
 const readOperators = (operators) => {
   if (operators === undefined || operators === null) return ALL_OPERATORS
@@ -77,11 +79,24 @@ const readOperators = (operators) => {
   return bits
 }
 
-// Every other combination can build every length; these two cannot, and
-// src/expr.rs says why.
-const cannotBuild = (answer, operators) => new RangeError(
-  `no task evaluating to ${answer} can be built from ${operators.join(' ')} alone: ` +
-  '0 needs + or -, and / alone cannot reach past 5000'
+// What may appear in the task, as the one integer the WebAssembly takes.
+// Only an explicit `negatives: false` rules them out, like the other flags.
+const readAllowed = (options, answer) => {
+  const operators = readOperators(options.operators)
+  if (options.negatives !== false) return operators
+  if (answer < 0) {
+    throw new RangeError(`answer ${answer} is negative, but negatives is false`)
+  }
+  return operators | NO_NEGATIVES
+}
+
+// A few combinations of answer, length and rules cannot be built at all;
+// the README lists them, and src/expr.rs says why.
+const cannotBuild = (length, answer, options) => new RangeError(
+  `no task of ${clampLength(length)} terms evaluating to ` +
+  `${answer === undefined ? 'an answer from 10 to 20' : answer} can be built from ` +
+  `${(options.operators || OPERATORS.split('')).join(' ')}` +
+  `${options.negatives === false ? ' without negative numbers' : ''}`
 )
 
 const readSeed = (seed) => {
@@ -110,7 +125,7 @@ export const init = (input) => {
 export const mathGen = (length, more) => {
   const options = more || {}
   const answer = readAnswer(options.answer)
-  const operators = readOperators(options.operators)
+  const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
   const data = generate(
@@ -119,10 +134,10 @@ export const mathGen = (length, more) => {
     answer !== undefined,
     options.brackets === true,
     options.quizMode === true,
-    operators,
+    allowed,
     seed
   )
-  if (data.length === 0) throw cannotBuild(answer, options.operators)
+  if (data.length === 0) throw cannotBuild(length, answer, options)
   return decode(data, 0)
 }
 
@@ -137,7 +152,7 @@ export const mathGenBatch = (count, length, more) => {
   }
   const options = more || {}
   const answer = readAnswer(options.answer)
-  const operators = readOperators(options.operators)
+  const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
   const data = generateBatch(
@@ -147,10 +162,10 @@ export const mathGenBatch = (count, length, more) => {
     answer !== undefined,
     options.brackets === true,
     options.quizMode === true,
-    operators,
+    allowed,
     seed
   )
-  if (data.length === 0 && count > 0) throw cannotBuild(answer, options.operators)
+  if (data.length === 0 && count > 0) throw cannotBuild(length, answer, options)
   const tasks = new Array(count)
   let at = 0
   for (let i = 0; i < count; i++) {

@@ -87,6 +87,7 @@ generated tasks; serve the repository over HTTP and open it.
 | `brackets` | `false` | Ask for a task containing at least one bracketed group. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
+| `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
 | `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. |
 
 An option that is given but cannot be honoured throws instead of being
@@ -94,12 +95,25 @@ quietly replaced: an `answer` outside the range above or with a fraction is a
 `RangeError`, and an `answer` or `seed` that is not a number is a `TypeError`.
 `null` and `undefined` mean the default.
 
-Every set of `operators` can build a task of any length, with two exceptions
-that throw a `RangeError` instead: an `answer` of `0` without `+` or `-`
-(zero is not a product or a quotient of anything but zero), and an `answer`
-past `5000` either side with `/` alone, since its numerator would pass
-`10000`. With `*` alone, a prime answer can only become `1 * p`, so expect
-plenty of ones.
+A few combinations cannot be built at all, and throw a `RangeError` rather
+than return a shorter task:
+
+- an `answer` of `0` without `+` or `-` (zero is not a product or a quotient
+  of anything but zero), or without `-` once `negatives` is `false`;
+- an `answer` past `5000` either side with `/` alone, since its numerator
+  would pass `10000`;
+- with `negatives: false`, a negative `answer`, `+` alone with an `answer`
+  smaller than `length` (every term is at least 1), and an `answer` of
+  `10000` with neither `+` nor `*`.
+
+With `*` alone a prime answer can only become `1 * p`, so expect plenty of
+ones. By default about one task in three of length 3 contains a negative
+number, and one in two of length 5.
+
+```js
+// A first-year worksheet: adding and taking away, nothing below zero.
+mathGenBatch(20, 3, { operators: ['+', '-'], negatives: false })
+```
 
 Returns:
 
