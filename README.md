@@ -86,12 +86,20 @@ generated tasks; serve the repository over HTTP and open it.
 | `answer` | a random integer in `10..=20` | The value the task must evaluate to, a whole number from `-10000` to `10000`. `0` is honoured. |
 | `brackets` | `false` | Ask for a task containing at least one bracketed group. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses. |
+| `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. |
 
 An option that is given but cannot be honoured throws instead of being
 quietly replaced: an `answer` outside the range above or with a fraction is a
 `RangeError`, and an `answer` or `seed` that is not a number is a `TypeError`.
 `null` and `undefined` mean the default.
+
+Every set of `operators` can build a task of any length, with two exceptions
+that throw a `RangeError` instead: an `answer` of `0` without `+` or `-`
+(zero is not a product or a quotient of anything but zero), and an `answer`
+past `5000` either side with `/` alone, since its numerator would pass
+`10000`. With `*` alone, a prime answer can only become `1 * p`, so expect
+plenty of ones.
 
 Returns:
 

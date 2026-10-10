@@ -18,6 +18,11 @@ export interface MathGenOptions {
   brackets?: boolean
   /** Fill `quizOptions` with the answer and three near misses. */
   quizMode?: boolean
+  /** The operators the task may use, e.g. `['+', '-']`. Default: all four.
+   *  Throws a RangeError for an unknown or empty list, and for the two
+   *  combinations that cannot build a task: an answer of 0 without `+` or
+   *  `-`, and an answer past 5000 either side with `/` alone. */
+  operators?: Operators[]
   /** Pin the generator, so the same seed gives the same task. A value that
    *  is not a finite number throws a TypeError rather than being ignored.
    *  Default: drawn from Math.random. */
