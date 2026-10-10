@@ -49,7 +49,70 @@ pub fn generate(
     quiz_mode: bool,
     seed: f64,
 ) -> Vec<i32> {
-    let mut rng = Rng::new(seed.abs() as u64);
+    let mut out = Vec::with_capacity(64);
+    let request = Request {
+        length,
+        answer,
+        use_answer,
+        brackets,
+        quiz_mode,
+    };
+    write_task(
+        &mut out,
+        &mut Vec::with_capacity(96),
+        &request,
+        seed.abs() as u64,
+    );
+    out
+}
+
+/// `count` tasks laid out one after another as `generate` lays out one, task
+/// `i` drawn from `seed + i` - so it is exactly the task `generate` gives for
+/// that seed, and a batch costs one crossing of the boundary instead of
+/// `count`.
+#[wasm_bindgen]
+pub fn generate_batch(
+    count: u32,
+    length: u32,
+    answer: f64,
+    use_answer: bool,
+    brackets: bool,
+    quiz_mode: bool,
+    seed: f64,
+) -> Vec<i32> {
+    let mut out = Vec::with_capacity(count as usize * 24);
+    let mut tokens = Vec::with_capacity(96);
+    let request = Request {
+        length,
+        answer,
+        use_answer,
+        brackets,
+        quiz_mode,
+    };
+    let seed = seed.abs() as u64;
+    for i in 0..count {
+        write_task(&mut out, &mut tokens, &request, seed.wrapping_add(i as u64));
+    }
+    out
+}
+
+struct Request {
+    length: u32,
+    answer: f64,
+    use_answer: bool,
+    brackets: bool,
+    quiz_mode: bool,
+}
+
+fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) {
+    let Request {
+        length,
+        answer,
+        use_answer,
+        brackets,
+        quiz_mode,
+    } = *request;
+    let mut rng = Rng::new(seed);
 
     let answer = if use_answer {
         // `more.answer ? more.answer : random` discarded an explicit 0; this
@@ -63,7 +126,6 @@ pub fn generate(
         rng.range(DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
     };
 
-    let mut tokens = Vec::with_capacity(96);
     let expression = expr::generate(
         &Config {
             answer,
@@ -71,7 +133,7 @@ pub fn generate(
             brackets,
         },
         &mut rng,
-        &mut tokens,
+        tokens,
     );
 
     // The tree is built so that this holds whatever shape it takes, and the
@@ -90,19 +152,18 @@ pub fn generate(
         Vec::new()
     };
 
-    let mut out = Vec::with_capacity(3 + quiz.len() + tokens.len());
     out.push(answer as i32);
     out.push(quiz.len() as i32);
     out.extend(quiz.iter().map(|&option| option as i32));
     out.push(tokens.len() as i32);
     out.extend(tokens.iter().map(|&token| code(token)));
-    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[derive(PartialEq, Debug)]
     struct Decoded {
         answer: i32,
         quiz: Vec<i32>,
@@ -110,12 +171,18 @@ mod tests {
     }
 
     fn decode(data: &[i32]) -> Decoded {
+        let (decoded, used) = decode_at(data);
+        assert_eq!(used, data.len(), "trailing data in {data:?}");
+        decoded
+    }
+
+    /// One task from the front of `data`, and how many integers it took.
+    fn decode_at(data: &[i32]) -> (Decoded, usize) {
         let quiz_len = data[1] as usize;
         let quiz = data[2..2 + quiz_len].to_vec();
         let tokens_at = 2 + quiz_len;
         let token_len = data[tokens_at] as usize;
-        let tokens = &data[tokens_at + 1..];
-        assert_eq!(tokens.len(), token_len, "trailing data in {data:?}");
+        let tokens = &data[tokens_at + 1..tokens_at + 1 + token_len];
         let task = tokens
             .iter()
             .map(|&t| {
@@ -126,11 +193,44 @@ mod tests {
                 }
             })
             .collect();
-        Decoded {
+        let decoded = Decoded {
             answer: data[0],
             quiz,
             task,
+        };
+        (decoded, tokens_at + 1 + token_len)
+    }
+
+    #[test]
+    fn a_batch_is_the_same_tasks_as_one_call_per_seed() {
+        for (length, use_answer, brackets, quiz_mode) in [
+            (2, false, false, true),
+            (5, true, true, false),
+            (9, false, true, true),
+            (32, true, false, true),
+        ] {
+            let data = generate_batch(50, length, -7.0, use_answer, brackets, quiz_mode, 1000.0);
+            let mut at = 0;
+            for i in 0..50 {
+                let (task, used) = decode_at(&data[at..]);
+                let single = generate(
+                    length,
+                    -7.0,
+                    use_answer,
+                    brackets,
+                    quiz_mode,
+                    1000.0 + i as f64,
+                );
+                assert_eq!(task, decode(&single), "task {i} of the batch");
+                at += used;
+            }
+            assert_eq!(at, data.len());
         }
+    }
+
+    #[test]
+    fn an_empty_batch_is_empty() {
+        assert!(generate_batch(0, 4, 0.0, false, false, true, 1.0).is_empty());
     }
 
     #[test]

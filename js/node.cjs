@@ -1,7 +1,7 @@
 // Node entry point. wasm-pack's nodejs target loads the module synchronously
 // from disk, so this works under plain require() and, through Node's named
 // export detection, under `import { mathGen } from 'samathgen'` as well.
-const { generate } = require('../dist/node/samathgen.js')
+const { generate, generate_batch: generateBatch } = require('../dist/node/samathgen.js')
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
@@ -10,24 +10,31 @@ const LENGTH_MAX = 32
 // overflowed into a task that evaluated to minus its reported answer.
 const ANSWER_LIMIT = 10000
 
-// The task comes back as integers, not JSON: [answer, option count,
+// A task comes back as integers, not JSON: [answer, option count,
 // options..., token count, tokens...], with + - * / ( ) as SYMBOL_BASE + 0..5.
-// No number in a task reaches SYMBOL_BASE. See src/lib.rs.
+// No number in a task reaches SYMBOL_BASE. A batch is tasks laid end to end.
+// See src/lib.rs.
 const SYMBOL_BASE = 1 << 24
 const SYMBOLS = ['+', '-', '*', '/', '(', ')']
+// A batch is meant for a worksheet or a quiz, not a dataset. Past this the
+// result stops being small, and a count taken from a request should not get
+// to decide how much memory the process asks for.
+const BATCH_LIMIT = 10000
 
-const decode = (data) => {
-  const optionCount = data[1]
+/** The task starting at `start`; it occupies `3 + quizOptions.length +
+ *  task.length` integers. */
+const decode = (data, start) => {
+  const optionCount = data[start + 1]
   const quizOptions = new Array(optionCount)
-  for (let i = 0; i < optionCount; i++) quizOptions[i] = data[2 + i]
-  const at = 3 + optionCount
+  for (let i = 0; i < optionCount; i++) quizOptions[i] = data[start + 2 + i]
+  const at = start + 3 + optionCount
   const tokenCount = data[at - 1]
   const task = new Array(tokenCount)
   for (let i = 0; i < tokenCount; i++) {
     const token = data[at + i]
     task[i] = token >= SYMBOL_BASE ? SYMBOLS[token - SYMBOL_BASE] : token
   }
-  return { task, answer: data[0], quizOptions }
+  return { task, answer: data[start], quizOptions }
 }
 
 const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
@@ -80,7 +87,39 @@ const mathGen = (length, more) => {
     options.brackets === true,
     options.quizMode === true,
     seed
-  ))
+  ), 0)
 }
 
-module.exports = { mathGen }
+/**
+ * Builds `count` tasks at once, in a single call into WebAssembly. Task `i`
+ * is exactly what `mathGen(length, { ...more, seed: seed + i })` gives, so a
+ * batch is reproducible from one seed and can be split or resumed.
+ */
+const mathGenBatch = (count, length, more) => {
+  if (!Number.isInteger(count) || count < 0 || count > BATCH_LIMIT) {
+    throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${count}`)
+  }
+  const options = more || {}
+  const answer = readAnswer(options.answer)
+  const seed = readSeed(options.seed)
+
+  const data = generateBatch(
+    count,
+    clampLength(length),
+    answer === undefined ? 0 : answer,
+    answer !== undefined,
+    options.brackets === true,
+    options.quizMode === true,
+    seed
+  )
+  const tasks = new Array(count)
+  let at = 0
+  for (let i = 0; i < count; i++) {
+    const result = decode(data, at)
+    tasks[i] = result
+    at += 3 + result.quizOptions.length + result.task.length
+  }
+  return tasks
+}
+
+module.exports = { mathGen, mathGenBatch }

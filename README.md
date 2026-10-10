@@ -108,6 +108,27 @@ Note that brackets can appear even with `brackets: false`, wherever operator
 precedence requires them. The alternative would be a task that does not
 evaluate to its answer.
 
+### `mathGenBatch(count, length, more?)`
+
+Builds `count` tasks in one call, for a worksheet or a whole quiz. It takes the
+same options as `mathGen` and returns an array of the same results, about
+twice as fast per task (see [On speed](#on-speed)).
+
+Task `i` is exactly what `mathGen(length, { ...more, seed: seed + i })` would
+give, so one seed reproduces the whole batch, and the third task of a
+worksheet can be regenerated on its own. Without a `seed` one is drawn, as for
+`mathGen`.
+
+`count` must be a whole number from `0` to `10000`; anything else is a
+`RangeError`. Past that a batch stops being small, and a count taken from a
+request should not get to decide how much memory a server asks for.
+
+```js
+import { mathGenBatch } from 'samathgen'
+
+const worksheet = mathGenBatch(20, 4, { seed: 2024, quizMode: true })
+```
+
 TypeScript declarations ship with the package.
 
 ## How it works
@@ -149,8 +170,19 @@ of 400 000 tasks:
 | 1.0, result as integers | 1.09 µs | 1.21 µs |
 | 1.0, no allocation per split | 0.90 µs | 1.05 µs |
 
-The WebAssembly shrank with it, from 26 545 to 21 889 bytes (12 359 to
-10 420 gzipped), because nothing formats text any more.
+Each call still crosses into WebAssembly and back once, and copies its result
+out. `mathGenBatch` does that once for the whole batch, measured the same way
+without brackets:
+
+| Tasks per call | per task |
+| --- | --- |
+| 1, `mathGen` | 0.98 µs |
+| 10 | 0.58 µs |
+| 100 | 0.55 µs |
+| 1000 | 0.51 µs |
+
+The WebAssembly shrank with it, by 4.6 kB (26 545 to 21 889 bytes at the
+time, 12 359 to 10 420 gzipped), because nothing formats text any more.
 
 `npm run bench` prints the figures for your machine.
 
