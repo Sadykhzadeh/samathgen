@@ -58,6 +58,32 @@ const readAnswer = (answer) => {
   return answer
 }
 
+// One bit per operator, in the order src/expr.rs numbers them.
+const OPERATORS = '+-*/'
+const ALL_OPERATORS = 0b1111
+
+const readOperators = (operators) => {
+  if (operators === undefined || operators === null) return ALL_OPERATORS
+  if (!Array.isArray(operators)) {
+    throw new TypeError(`operators must be an array such as ['+', '-'], got ${typeof operators}`)
+  }
+  let bits = 0
+  for (const operator of operators) {
+    const index = typeof operator === 'string' && operator.length === 1 ? OPERATORS.indexOf(operator) : -1
+    if (index < 0) throw new RangeError(`unknown operator ${JSON.stringify(operator)}, expected + - * or /`)
+    bits |= 1 << index
+  }
+  if (bits === 0) throw new RangeError('operators must name at least one of + - * /')
+  return bits
+}
+
+// Every other combination can build every length; these two cannot, and
+// src/expr.rs says why.
+const cannotBuild = (answer, operators) => new RangeError(
+  `no task evaluating to ${answer} can be built from ${operators.join(' ')} alone: ` +
+  '0 needs + or -, and / alone cannot reach past 5000'
+)
+
 const readSeed = (seed) => {
   if (seed === undefined || seed === null) return drawSeed()
   if (typeof seed !== 'number' || !Number.isFinite(seed)) {
@@ -84,16 +110,20 @@ export const init = (input) => {
 export const mathGen = (length, more) => {
   const options = more || {}
   const answer = readAnswer(options.answer)
+  const operators = readOperators(options.operators)
   const seed = readSeed(options.seed)
 
-  return decode(generate(
+  const data = generate(
     clampLength(length),
     answer === undefined ? 0 : answer,
     answer !== undefined,
     options.brackets === true,
     options.quizMode === true,
+    operators,
     seed
-  ), 0)
+  )
+  if (data.length === 0) throw cannotBuild(answer, options.operators)
+  return decode(data, 0)
 }
 
 /**
@@ -107,6 +137,7 @@ export const mathGenBatch = (count, length, more) => {
   }
   const options = more || {}
   const answer = readAnswer(options.answer)
+  const operators = readOperators(options.operators)
   const seed = readSeed(options.seed)
 
   const data = generateBatch(
@@ -116,8 +147,10 @@ export const mathGenBatch = (count, length, more) => {
     answer !== undefined,
     options.brackets === true,
     options.quizMode === true,
+    operators,
     seed
   )
+  if (data.length === 0 && count > 0) throw cannotBuild(answer, options.operators)
   const tasks = new Array(count)
   let at = 0
   for (let i = 0; i < count; i++) {

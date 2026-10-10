@@ -53,10 +53,41 @@ impl Op {
         }
     }
 
+    fn bit(self) -> u8 {
+        1 << self as u8
+    }
+
     /// `a - (b - c)` and `a / (b * c)` are not the same as dropping the
     /// brackets, while `a + (b - c)` and `a * (b / c)` are.
     fn right_operand_needs_brackets_at_equal_precedence(self) -> bool {
         matches!(self, Op::Sub | Op::Div)
+    }
+}
+
+/// The operators a task may use, one bit per `Op`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Ops(u8);
+
+impl Ops {
+    pub const ALL: Ops = Ops(0b1111);
+
+    /// `None` for an empty set or a bit that names no operator.
+    pub fn from_bits(bits: u32) -> Option<Ops> {
+        if bits == 0 || bits > Ops::ALL.0 as u32 {
+            None
+        } else {
+            Some(Ops(bits as u8))
+        }
+    }
+
+    pub fn has(self, op: Op) -> bool {
+        self.0 & op.bit() != 0
+    }
+
+    /// With only `+`, or only `*`, no grouping ever changes the value, so no
+    /// task can need a bracket and asking for one again is wasted work.
+    fn can_need_brackets(self) -> bool {
+        self != Ops(Op::Add.bit()) && self != Ops(Op::Mul.bit())
     }
 }
 
@@ -120,7 +151,7 @@ impl Expr {
         }
     }
 
-    fn split_nth_leaf(&mut self, index: &mut usize, rng: &mut Rng) -> Visit {
+    fn split_nth_leaf(&mut self, index: &mut usize, ops: Ops, rng: &mut Rng) -> Visit {
         match self {
             Expr::Num(value) => {
                 let current = *value;
@@ -128,7 +159,7 @@ impl Expr {
                     *index -= 1;
                     return Visit::Missed;
                 }
-                match split_value(current, rng) {
+                match split_value(current, ops, rng) {
                     Some((left, op, right)) => {
                         *self = Expr::Binary {
                             op,
@@ -140,8 +171,8 @@ impl Expr {
                     None => Visit::Failed,
                 }
             }
-            Expr::Binary { left, right, .. } => match left.split_nth_leaf(index, rng) {
-                Visit::Missed => right.split_nth_leaf(index, rng),
+            Expr::Binary { left, right, .. } => match left.split_nth_leaf(index, ops, rng) {
+                Visit::Missed => right.split_nth_leaf(index, ops, rng),
                 reached => reached,
             },
         }
@@ -252,19 +283,21 @@ fn useful_divisors(value: i64, out: &mut [i64; MAX_DIVISORS]) -> usize {
 
 /// Picks `(a, op, b)` such that `a op b == value` exactly, or `None` when
 /// this value cannot be split within the bounds above.
-fn split_value(value: i64, rng: &mut Rng) -> Option<(i64, Op, i64)> {
-    let mut candidates = [Op::Add, Op::Sub, Op::Mul, Op::Div];
-    let mut count = 2;
+fn split_value(value: i64, ops: Ops, rng: &mut Rng) -> Option<(i64, Op, i64)> {
     // 0 * anything and 0 / anything are degenerate: the other operand carries
     // no constraint, which is how the old generator ended up emitting
     // "1*3*2*0+0*0*0*0..." for a large length.
-    if value != 0 {
-        if value.abs() <= MAX_ABS {
-            candidates[count] = Op::Mul;
-            count += 1;
-        }
-        if value.abs() * DIVISOR_MIN <= MAX_ABS {
-            candidates[count] = Op::Div;
+    let usable = [
+        true,
+        true,
+        value != 0 && value.abs() <= MAX_ABS,
+        value != 0 && value.abs() * DIVISOR_MIN <= MAX_ABS,
+    ];
+    let mut candidates = [Op::Add; 4];
+    let mut count = 0;
+    for op in [Op::Add, Op::Sub, Op::Mul, Op::Div] {
+        if usable[op as usize] && ops.has(op) {
+            candidates[count] = op;
             count += 1;
         }
     }
@@ -349,18 +382,28 @@ pub struct Config {
     pub answer: i64,
     pub length: usize,
     pub brackets: bool,
+    pub ops: Ops,
 }
 
 /// Builds the task and writes its tokens into `tokens`, which the bracket
 /// check needs anyway, so the caller does not render it a second time.
-pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Expr {
+///
+/// `None` when the operators cannot reach the length asked for. With the
+/// bounds above that happens in two cases only: an answer of 0 with neither
+/// `+` nor `-` (0 cannot be a product or a quotient without a zero in it),
+/// and an answer past `MAX_ABS / 2` with `/` alone.
+pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
     let wanted = config.length.clamp(2, 32);
 
     // `brackets` asks for a shape, not a different answer, so the whole task
     // is simply drawn again until the shape appears. If it does not after a
     // few tries the last one is returned: a task that evaluates correctly
     // without brackets beats no task at all.
-    let attempts = if config.brackets { 24 } else { 1 };
+    let attempts = if config.brackets && config.ops.can_need_brackets() {
+        24
+    } else {
+        1
+    };
     let mut last = None;
 
     for _ in 0..attempts {
@@ -371,20 +414,23 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Expr
         while leaves < wanted && guard < wanted * 64 {
             guard += 1;
             let mut index = rng.below(leaves as u64) as usize;
-            if let Visit::Split = expr.split_nth_leaf(&mut index, rng) {
+            if let Visit::Split = expr.split_nth_leaf(&mut index, config.ops, rng) {
                 leaves += 1;
             }
+        }
+        if leaves < wanted {
+            return None;
         }
         tokens.clear();
         expr.write(tokens);
         if !config.brackets || tokens.contains(&Token::Open) {
-            return expr;
+            return Some(expr);
         }
         last = Some(expr);
     }
 
     // `tokens` still holds the last attempt, which is the one returned.
-    last.unwrap_or(Expr::Num(config.answer))
+    last
 }
 
 #[cfg(test)]
@@ -392,7 +438,7 @@ mod tests {
     use super::*;
 
     fn build(config: &Config, rng: &mut Rng) -> Expr {
-        generate(config, rng, &mut Vec::new())
+        generate(config, rng, &mut Vec::new()).expect("every operator can build any length")
     }
 
     fn has_brackets(expr: &Expr) -> bool {
@@ -489,6 +535,7 @@ mod tests {
                 answer,
                 length,
                 brackets,
+                ops: Ops::ALL,
             },
             &mut rng,
         );
@@ -580,6 +627,54 @@ mod tests {
     }
 
     #[test]
+    fn every_set_of_operators_builds_what_it_can_and_refuses_the_rest() {
+        let only_div = Ops::from_bits(1 << Op::Div as u32).unwrap();
+        for bits in 1..=15 {
+            let ops = Ops::from_bits(bits).unwrap();
+            for answer in [
+                -MAX_ABS, -5001, -5000, -37, -1, 0, 1, 2, 12, 97, 4999, 5000, 5001, 9973, MAX_ABS,
+            ] {
+                let impossible = (answer == 0 && !ops.has(Op::Add) && !ops.has(Op::Sub))
+                    || (answer.abs() > MAX_ABS / 2 && ops == only_div);
+                for length in [2, 3, 5, 8, 16, 32] {
+                    for seed in 0..8 {
+                        let config = Config {
+                            answer,
+                            length,
+                            brackets: seed % 2 == 0,
+                            ops,
+                        };
+                        let mut tokens = Vec::new();
+                        let built = generate(&config, &mut Rng::new(seed), &mut tokens);
+                        let what = format!("answer {answer}, length {length}, ops {bits:04b}");
+                        let Some(expr) = built else {
+                            assert!(impossible, "refused {what}");
+                            continue;
+                        };
+                        assert!(!impossible, "built {what}");
+                        assert_eq!(expr.leaf_count(), length, "{what}");
+                        assert_eq!(Parser::parse(&tokens), answer, "{what}");
+                        for token in &tokens {
+                            match token {
+                                Token::Op(op) => assert!(ops.has(*op), "{op:?} in {what}"),
+                                Token::Num(n) => assert!(n.abs() <= MAX_ABS, "{n} in {what}"),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_empty_or_unknown_operator_set_is_refused() {
+        assert_eq!(Ops::from_bits(0), None);
+        assert_eq!(Ops::from_bits(16), None);
+        assert_eq!(Ops::from_bits(15), Some(Ops::ALL));
+    }
+
+    #[test]
     fn it_holds_for_an_answer_of_zero() {
         for seed in 0..2000 {
             check(0, 4, false, seed);
@@ -601,6 +696,7 @@ mod tests {
                 answer: 0,
                 length: 3,
                 brackets: false,
+                ops: Ops::ALL,
             },
             &mut rng,
         );
@@ -617,6 +713,7 @@ mod tests {
                     answer: 24,
                     length: 5,
                     brackets: true,
+                    ops: Ops::ALL,
                 },
                 &mut rng,
             );
@@ -639,6 +736,7 @@ mod tests {
                     answer: 12,
                     length: 6,
                     brackets: false,
+                    ops: Ops::ALL,
                 },
                 &mut rng,
             );
@@ -656,6 +754,7 @@ mod tests {
             answer: 15,
             length: 5,
             brackets: true,
+            ops: Ops::ALL,
         };
         let first = render(&build(&config, &mut Rng::new(99)).tokens());
         let second = render(&build(&config, &mut Rng::new(99)).tokens());

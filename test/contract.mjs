@@ -231,6 +231,47 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGenBatch(3, 4, { seed: '1' }), TypeError)
   })
 
+  check('operators keeps every task to the operators named', () => {
+    const symbols = ['+', '-', '*', '/']
+    for (let bits = 1; bits < 16; bits++) {
+      const operators = symbols.filter((_, i) => bits & (1 << i))
+      for (let seed = 0; seed < 150; seed++) {
+        const length = 2 + (seed % 9)
+        const result = mathGen(length, { operators, seed, brackets: seed % 2 === 0 })
+        const text = result.task.join('')
+        for (const token of result.task) {
+          if (symbols.includes(token)) assert.ok(operators.includes(token), `${token} in ${text} from ${operators}`)
+        }
+        assert.equal(result.task.filter((t) => typeof t === 'number').length, length, text)
+        // eslint-disable-next-line no-eval
+        assert.equal(eval(text), result.answer, text)
+      }
+    }
+  })
+
+  check('leaving operators out means all four, in any order', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const plain = mathGen(5, { seed, brackets: true })
+      assert.deepEqual(mathGen(5, { seed, brackets: true, operators: ['+', '-', '*', '/'] }), plain)
+      assert.deepEqual(mathGen(5, { seed, brackets: true, operators: ['/', '*', '-', '+', '+'] }), plain)
+    }
+  })
+
+  check('operators that cannot reach the answer are refused', () => {
+    assert.throws(() => mathGen(3, { answer: 0, operators: ['*', '/'] }), RangeError)
+    assert.throws(() => mathGen(3, { answer: 6000, operators: ['/'] }), RangeError)
+    assert.throws(() => mathGenBatch(4, 3, { answer: 0, operators: ['*'] }), RangeError)
+    assert.equal(mathGen(3, { answer: 0, operators: ['-'] }).answer, 0)
+    assert.equal(mathGen(3, { answer: 5000, operators: ['/'], seed: 3 }).answer, 5000)
+  })
+
+  check('operators that are not a list of + - * / are refused', () => {
+    for (const operators of [[], ['x'], ['toString'], ['++'], [1]]) {
+      assert.throws(() => mathGen(3, { operators }), RangeError, JSON.stringify(operators))
+    }
+    assert.throws(() => mathGen(3, { operators: '+-' }), TypeError)
+  })
+
   check('the CLI wire format still parses', () => {
     // SaMathAPI sends "<task> <opt1>,<opt2>,<opt3>,<opt4> <answer>" and
     // SaMathCLI splits it on spaces and commas, so no token may contain either.

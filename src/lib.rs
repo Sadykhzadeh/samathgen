@@ -15,7 +15,7 @@ mod expr;
 mod options;
 mod rng;
 
-use expr::{Config, Token};
+use expr::{Config, Ops, Token};
 use rng::Rng;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -39,7 +39,11 @@ fn code(token: Token) -> i32 {
 /// Produces `[answer, option count, options..., token count, tokens...]`.
 ///
 /// `seed` makes a run reproducible. The JavaScript wrapper draws one when the
-/// caller does not supply it.
+/// caller does not supply it. `operators` has bit `1 << n` set for each of
+/// `+ - * /` allowed, in that order.
+///
+/// An empty array means the operators cannot build a task of that length
+/// for that answer; see `expr::generate`.
 #[wasm_bindgen]
 pub fn generate(
     length: u32,
@@ -47,6 +51,7 @@ pub fn generate(
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
+    operators: u32,
     seed: f64,
 ) -> Vec<i32> {
     let mut out = Vec::with_capacity(64);
@@ -56,6 +61,7 @@ pub fn generate(
         use_answer,
         brackets,
         quiz_mode,
+        ops: Ops::from_bits(operators).unwrap_or(Ops::ALL),
     };
     write_task(
         &mut out,
@@ -69,8 +75,9 @@ pub fn generate(
 /// `count` tasks laid out one after another as `generate` lays out one, task
 /// `i` drawn from `seed + i` - so it is exactly the task `generate` gives for
 /// that seed, and a batch costs one crossing of the boundary instead of
-/// `count`.
+/// `count`. Empty, like `generate`, if any task cannot be built.
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub fn generate_batch(
     count: u32,
     length: u32,
@@ -78,6 +85,7 @@ pub fn generate_batch(
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
+    operators: u32,
     seed: f64,
 ) -> Vec<i32> {
     let mut out = Vec::with_capacity(count as usize * 24);
@@ -88,10 +96,13 @@ pub fn generate_batch(
         use_answer,
         brackets,
         quiz_mode,
+        ops: Ops::from_bits(operators).unwrap_or(Ops::ALL),
     };
     let seed = seed.abs() as u64;
     for i in 0..count {
-        write_task(&mut out, &mut tokens, &request, seed.wrapping_add(i as u64));
+        if !write_task(&mut out, &mut tokens, &request, seed.wrapping_add(i as u64)) {
+            return Vec::new();
+        }
     }
     out
 }
@@ -102,15 +113,19 @@ struct Request {
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
+    ops: Ops,
 }
 
-fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) {
+/// Appends one task to `out`, or returns false and appends nothing when the
+/// operators cannot build it.
+fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) -> bool {
     let Request {
         length,
         answer,
         use_answer,
         brackets,
         quiz_mode,
+        ops,
     } = *request;
     let mut rng = Rng::new(seed);
 
@@ -126,15 +141,18 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         rng.range(DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
     };
 
-    let expression = expr::generate(
+    let Some(expression) = expr::generate(
         &Config {
             answer,
             length: length as usize,
             brackets,
+            ops,
         },
         &mut rng,
         tokens,
-    );
+    ) else {
+        return false;
+    };
 
     // The tree is built so that this holds whatever shape it takes, and the
     // brackets are placed by precedence, so the two halves cannot disagree.
@@ -157,11 +175,14 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     out.extend(quiz.iter().map(|&option| option as i32));
     out.push(tokens.len() as i32);
     out.extend(tokens.iter().map(|&token| code(token)));
+    true
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ALL: u32 = 0b1111;
 
     #[derive(PartialEq, Debug)]
     struct Decoded {
@@ -209,7 +230,9 @@ mod tests {
             (9, false, true, true),
             (32, true, false, true),
         ] {
-            let data = generate_batch(50, length, -7.0, use_answer, brackets, quiz_mode, 1000.0);
+            let data = generate_batch(
+                50, length, -7.0, use_answer, brackets, quiz_mode, ALL, 1000.0,
+            );
             let mut at = 0;
             for i in 0..50 {
                 let (task, used) = decode_at(&data[at..]);
@@ -219,6 +242,7 @@ mod tests {
                     use_answer,
                     brackets,
                     quiz_mode,
+                    ALL,
                     1000.0 + i as f64,
                 );
                 assert_eq!(task, decode(&single), "task {i} of the batch");
@@ -230,12 +254,12 @@ mod tests {
 
     #[test]
     fn an_empty_batch_is_empty() {
-        assert!(generate_batch(0, 4, 0.0, false, false, true, 1.0).is_empty());
+        assert!(generate_batch(0, 4, 0.0, false, false, true, ALL, 1.0).is_empty());
     }
 
     #[test]
     fn the_layout_is_what_the_wrapper_expects() {
-        let data = generate(3, 12.0, true, false, true, 1234.0);
+        let data = generate(3, 12.0, true, false, true, ALL, 1234.0);
         let decoded = decode(&data);
         assert_eq!(decoded.answer, 12);
         assert_eq!(decoded.quiz.len(), 4);
@@ -245,20 +269,20 @@ mod tests {
 
     #[test]
     fn quiz_mode_off_gives_an_empty_option_list() {
-        let data = generate(3, 12.0, true, false, false, 1.0);
+        let data = generate(3, 12.0, true, false, false, ALL, 1.0);
         assert!(decode(&data).quiz.is_empty());
     }
 
     #[test]
     fn an_explicit_answer_of_zero_survives_the_boundary() {
-        let data = generate(3, 0.0, true, false, false, 7.0);
+        let data = generate(3, 0.0, true, false, false, ALL, 7.0);
         assert_eq!(decode(&data).answer, 0);
     }
 
     #[test]
     fn without_an_answer_one_is_drawn_from_the_documented_range() {
         for seed in 1..500 {
-            let answer = decode(&generate(2, 0.0, false, false, false, seed as f64)).answer;
+            let answer = decode(&generate(2, 0.0, false, false, false, ALL, seed as f64)).answer;
             assert!(
                 (DEFAULT_ANSWER_LOW..=DEFAULT_ANSWER_HIGH).contains(&(answer as i64)),
                 "drew {answer}"
@@ -276,7 +300,7 @@ mod tests {
 
     #[test]
     fn operators_and_numbers_both_come_through() {
-        let task = decode(&generate(2, 6.0, true, false, false, 3.0)).task;
+        let task = decode(&generate(2, 6.0, true, false, false, ALL, 3.0)).task;
         assert!(task.chars().any(|c| "+-*/".contains(c)), "{task}");
         assert!(task.chars().any(|c| c.is_ascii_digit()), "{task}");
     }
