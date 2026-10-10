@@ -7,8 +7,10 @@ export type Operators = '+' | '-' | '*' | '/'
 export type Bracket = '(' | ')'
 
 export interface MathGenOptions {
-  /** The value the task must evaluate to. 0 is honoured. Default: a random
-   *  integer in 10..=20. */
+  /** The value the task must evaluate to: a whole number from -10000 to
+   *  10000, 0 included. Anything else throws a RangeError (or a TypeError
+   *  for a value that is not a number). Default: a random integer in
+   *  10..=20. */
   answer?: number
   /** Ask for a task that contains at least one bracketed group. Brackets may
    *  appear without this when precedence requires them - the alternative
@@ -16,8 +18,9 @@ export interface MathGenOptions {
   brackets?: boolean
   /** Fill `quizOptions` with the answer and three near misses. */
   quizMode?: boolean
-  /** Pin the generator, so the same seed gives the same task. Default: drawn
-   *  from Math.random. */
+  /** Pin the generator, so the same seed gives the same task. A value that
+   *  is not a finite number throws a TypeError rather than being ignored.
+   *  Default: drawn from Math.random. */
   seed?: number
 }
 

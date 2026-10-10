@@ -16,8 +16,9 @@
 use crate::rng::Rng;
 
 /// Leaves and intermediate values stay inside this, so the numbers remain
-/// readable and nothing can overflow on the way.
-const MAX_ABS: i64 = 10_000;
+/// readable and nothing can overflow on the way. An answer past it cannot be
+/// split at all, so the wrappers refuse one.
+pub const MAX_ABS: i64 = 10_000;
 /// How far `+` and `-` reach for their second operand.
 const OFFSET_MAX: i64 = 30;
 /// Divisors `/` will introduce. Two at the least: `x / 1` teaches nothing.
@@ -490,6 +491,22 @@ mod tests {
             let length = seeds.range(2, 8) as usize;
             let brackets = seeds.below(2) == 0;
             check(answer, length, brackets, seeds.next_u32() as u64);
+        }
+    }
+
+    #[test]
+    fn every_answer_the_wrappers_accept_gets_the_length_asked_for() {
+        // Both ends, the primes nearest them (nothing to multiply), and the
+        // point past which `/` no longer fits.
+        let answers = [
+            -MAX_ABS, -9973, -5001, -1, 0, 1, 4999, 5000, 5001, 9973, MAX_ABS,
+        ];
+        for answer in answers {
+            for length in 2..=32 {
+                for seed in 0..12 {
+                    check(answer, length, seed % 2 == 0, seed);
+                }
+            }
         }
     }
 
