@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --release
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install
+      - run: npm run build
+      - name: the generated task has to evaluate to its answer, 200000 times
+        run: npm run test:js
+      - name: the declarations have to parse
+        run: npx -y -p typescript tsc --noEmit --strict js/index.d.ts
+      - name: the tarball has to carry both wasm builds
+        run: |
+          npm pack --pack-destination /tmp
+          tar -tzf /tmp/samathgen-*.tgz | grep -q 'package/dist/node/samathgen_bg.wasm'
+          tar -tzf /tmp/samathgen-*.tgz | grep -q 'package/dist/web/samathgen_bg.wasm'
+          echo "both targets present"
+      - name: and it has to work once installed
+        run: |
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          echo '{"name":"consumer","private":true,"type":"module"}' > package.json
+          npm install /tmp/samathgen-*.tgz
+          node --input-type=module -e "
+            import { mathGen } from 'samathgen'
+            let wrong = 0
+            for (let i = 0; i < 20000; i++) {
+              const r = mathGen(2 + (i % 6), { quizMode: true })
+              if (eval(r.task.join('')) !== r.answer) wrong++
+            }
+            if (wrong) throw new Error(wrong + ' tasks did not evaluate to their answer')
+            console.log('installed package verified')
+          "
