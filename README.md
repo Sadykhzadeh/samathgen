@@ -111,8 +111,8 @@ ones. By default about one task in three of length 3 contains a negative
 number, and one in two of length 5.
 
 ```js
-// A first-year worksheet: adding and taking away, nothing below zero.
-mathGenBatch(20, 3, { operators: ['+', '-'], negatives: false })
+// adding and taking away, nothing below zero
+mathGen(3, { operators: ['+', '-'], negatives: false })
 ```
 
 Returns:
@@ -161,9 +161,6 @@ each step replaces some leaf holding `v` with a node that evaluates to exactly
 `a = v * b`. Every division introduced is exact. The root therefore keeps its
 value whatever shape the tree takes, and the text is produced afterwards with
 brackets placed by precedence.
-
-Both halves of that are exact, so the task evaluating to the answer is a
-property of the construction rather than something to hope for.
 
 Versions up to 0.1.4 worked the other way round: they spliced a
 sub-expression in place of an operand and printed the result flat, with a

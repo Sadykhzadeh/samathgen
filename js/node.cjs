@@ -112,12 +112,10 @@ const readSeed = (seed) => {
  *
  * Evaluating `task.join('')` always gives `answer` back: the expression is
  * generated as a tree and bracketed by precedence, so the two cannot drift
- * apart. Up to 0.1.4 the pieces were spliced together flat and about 6% of
- * tasks evaluated to something else.
+ * apart.
  */
 const mathGen = (length, more) => {
   const options = more || {}
-  // `more.answer ? more.answer : random` used to throw away an explicit 0.
   const answer = readAnswer(options.answer)
   const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
