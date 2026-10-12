@@ -79,7 +79,8 @@ generated tasks; serve the repository over HTTP and open it.
 
 ### `mathGen(length, more?)`
 
-`length` is how many numbers the task contains, clamped to `2..=32`.
+`length` is how many numbers the task contains, clamped to `2..=32`; one that
+is not a number at all is a `TypeError`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -88,12 +89,12 @@ generated tasks; serve the repository over HTTP and open it.
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
-| `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. |
+| `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. A whole number from `0` to `Number.MAX_SAFE_INTEGER`. |
 
 An option that is given but cannot be honoured throws instead of being
-quietly replaced: an `answer` outside the range above or with a fraction is a
-`RangeError`, and an `answer` or `seed` that is not a number is a `TypeError`.
-`null` and `undefined` mean the default.
+quietly replaced: an `answer` or `seed` outside the range above or with a
+fraction is a `RangeError`, and a `length`, `answer` or `seed` that is not a
+number is a `TypeError`. `null` and `undefined` mean the default.
 
 A few combinations cannot be built at all, and throw a `RangeError` rather
 than return a shorter task:

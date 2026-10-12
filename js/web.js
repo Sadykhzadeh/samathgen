@@ -43,6 +43,9 @@ let loading = null
 const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 
 const clampLength = (length) => {
+  if (length !== undefined && length !== null && typeof length !== 'number') {
+    throw new TypeError(`length must be a number, got ${typeof length}`)
+  }
   if (!Number.isFinite(length)) return LENGTH_MIN
   return Math.min(Math.max(Math.trunc(length), LENGTH_MIN), LENGTH_MAX)
 }
@@ -99,12 +102,17 @@ const cannotBuild = (length, answer, options) => new RangeError(
   `${options.negatives === false ? ' without negative numbers' : ''}`
 )
 
+// Task i of a batch is the task for seed + i, which only holds for whole
+// numbers that JavaScript can count up from exactly.
 const readSeed = (seed) => {
   if (seed === undefined || seed === null) return drawSeed()
   if (typeof seed !== 'number' || !Number.isFinite(seed)) {
     throw new TypeError(`seed must be a finite number, got ${typeof seed === 'number' ? seed : typeof seed}`)
   }
-  return Math.abs(Math.trunc(seed))
+  if (!Number.isSafeInteger(seed) || seed < 0) {
+    throw new RangeError(`seed must be a whole number from 0 to ${Number.MAX_SAFE_INTEGER}, got ${seed}`)
+  }
+  return seed
 }
 
 /** Loads the wasm module. Safe to call more than once; the same promise
