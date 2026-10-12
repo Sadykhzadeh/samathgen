@@ -64,8 +64,9 @@ export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 export function mathGenBatch (count: number, length: number, more?: MathGenOptions): MathGenResult[]
 
 /**
- * Browser entry point only: loads the WebAssembly module. Await it once
- * before calling `mathGen`. Not exported by the Node entry point, which
- * loads the module synchronously.
+ * Loads the WebAssembly module. In the browser, await it once before calling
+ * `mathGen` or `mathGenBatch`, which throw until it has finished. Under Node
+ * the module is loaded with the package and this resolves at once, so the
+ * same code runs in both.
  */
 export function init (input?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module): Promise<unknown>

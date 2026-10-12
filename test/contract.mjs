@@ -14,7 +14,7 @@
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch } from '../js/node.cjs'
+import { init as nodeInit, mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch } from '../js/node.cjs'
 import { init, mathGen as webMathGen, mathGenBatch as webMathGenBatch } from '../js/web.js'
 
 const SAMPLES = Number(process.argv[2] || 200_000)
@@ -358,9 +358,18 @@ console.log('\nnode entry point')
 check('named import works from ESM', () => {
   assert.equal(typeof nodeMathGen, 'function')
 })
+// Code written for the browser entry point awaits init() first.
+check('init() is there and resolves', () => {
+  assert.ok(nodeInit() instanceof Promise)
+})
+await nodeInit()
 suite(nodeMathGen, nodeMathGenBatch)
 
 console.log('\nbrowser entry point')
+check('a call before init() says to await it', () => {
+  assert.throws(() => webMathGen(3), /await init\(\)/)
+  assert.throws(() => webMathGenBatch(2, 3), /await init\(\)/)
+})
 const warnings = []
 const warn = console.warn
 console.warn = (...args) => warnings.push(args.join(' '))

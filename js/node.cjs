@@ -176,4 +176,9 @@ const mathGenBatch = (count, length, more) => {
   return tasks
 }
 
-module.exports = { mathGen, mathGenBatch }
+/** Resolves at once: under Node the module was loaded with the package.
+ *  It is here so that code written for the browser entry point, which has
+ *  to await init(), runs unchanged under Node as well. */
+const init = () => Promise.resolve()
+
+module.exports = { init, mathGen, mathGenBatch }
