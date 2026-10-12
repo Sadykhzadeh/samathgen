@@ -39,6 +39,7 @@ const decode = (data, start) => {
 }
 
 let loading = null
+let ready = false
 
 const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 
@@ -120,8 +121,17 @@ const readSeed = (seed) => {
 export const init = (input) => {
   // wasm-bindgen takes the override wrapped in an object now, and logs a
   // deprecation warning for every bare argument it is still handed.
-  loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input })
+  loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input }).then((exports) => {
+    ready = true
+    return exports
+  })
   return loading
+}
+
+// Without this a call made before init() has finished fails inside the
+// wasm-bindgen glue, with "Cannot read properties of undefined".
+const assertReady = () => {
+  if (!ready) throw new Error('samathgen is not loaded yet: call and await init() first')
 }
 
 /**
@@ -131,6 +141,7 @@ export const init = (input) => {
  * generated as a tree and bracketed by precedence.
  */
 export const mathGen = (length, more) => {
+  assertReady()
   const options = more || {}
   const answer = readAnswer(options.answer)
   const allowed = readAllowed(options, answer)
@@ -155,6 +166,7 @@ export const mathGen = (length, more) => {
  * batch is reproducible from one seed and can be split or resumed.
  */
 export const mathGenBatch = (count, length, more) => {
+  assertReady()
   if (!Number.isInteger(count) || count < 0 || count > BATCH_LIMIT) {
     throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${count}`)
   }

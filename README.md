@@ -72,6 +72,10 @@ await init()
 mathGen(4, { quizMode: true })
 ```
 
+Until `init()` has finished, `mathGen` and `mathGenBatch` throw an error that
+says so. The Node entry point exports `init()` too, resolving at once, so code
+written this way also runs under Node, in tests or on a server.
+
 `test/browser.html` is a page that does exactly this and then checks 20 000
 generated tasks; serve the repository over HTTP and open it.
 
