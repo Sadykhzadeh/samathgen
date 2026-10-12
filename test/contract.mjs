@@ -71,6 +71,14 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('a length that is not a number is refused rather than read as 2', () => {
+    for (const length of ['6', {}, true, [4]]) {
+      assert.throws(() => mathGen(length, { seed: 1 }), TypeError, `length ${JSON.stringify(length)}`)
+      assert.throws(() => mathGenBatch(2, length, { seed: 1 }), TypeError, `length ${JSON.stringify(length)}`)
+    }
+    assert.equal(mathGen(null, { seed: 1 }).task.filter((t) => typeof t === 'number').length, 2)
+  })
+
   check('an explicit answer of 0 is honoured', () => {
     for (let seed = 0; seed < 500; seed++) {
       const result = mathGen(4, { answer: 0, seed })
@@ -118,6 +126,17 @@ const suite = (mathGen, mathGenBatch) => {
       assert.throws(() => mathGen(4, { seed }), TypeError, `seed ${String(seed)}`)
     }
     assert.equal(typeof mathGen(4, { seed: null }).answer, 'number')
+  })
+
+  check('a seed outside 0..2^53-1 or with a fraction is refused', () => {
+    // Each of these could only be honoured as some other seed.
+    for (const seed of [-1, -5, 1.5, 2 ** 53, 1e20]) {
+      assert.throws(() => mathGen(4, { seed }), RangeError, `seed ${seed}`)
+      assert.throws(() => mathGenBatch(2, 4, { seed }), RangeError, `seed ${seed}`)
+    }
+    for (const seed of [0, Number.MAX_SAFE_INTEGER]) {
+      assert.deepEqual(mathGen(4, { seed }), mathGenBatch(1, 4, { seed })[0], `seed ${seed}`)
+    }
   })
 
   check('without an answer one is drawn from 10..20', () => {

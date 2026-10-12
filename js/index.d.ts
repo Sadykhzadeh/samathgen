@@ -29,9 +29,10 @@ export interface MathGenOptions {
    *  working the task out left to right at 0 or above. A negative answer
    *  then throws a RangeError. Default: true. */
   negatives?: boolean
-  /** Pin the generator, so the same seed gives the same task. A value that
-   *  is not a finite number throws a TypeError rather than being ignored.
-   *  Default: drawn from Math.random. */
+  /** Pin the generator, so the same seed gives the same task: a whole number
+   *  from 0 to Number.MAX_SAFE_INTEGER. Anything else throws a RangeError
+   *  (or a TypeError for a value that is not a finite number) rather than
+   *  being ignored. Default: drawn from Math.random. */
   seed?: number
 }
 
@@ -47,7 +48,8 @@ export interface MathGenResult {
 /**
  * Builds a task whose value is `answer`.
  *
- * `length` is the number of numbers in the task, clamped to 2..=32.
+ * `length` is the number of numbers in the task, clamped to 2..=32. A value
+ * that is not a number throws a TypeError.
  */
 export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 
