@@ -12,9 +12,11 @@ export interface MathGenOptions {
    *  for a value that is not a number). Default: a random integer in
    *  10..=20. */
   answer?: number
-  /** Ask for a task that contains at least one bracketed group. Brackets may
-   *  appear without this when precedence requires them - the alternative
-   *  would be a task that does not evaluate to its answer. */
+  /** Ask for a task that groups part of itself in brackets, as in
+   *  `(2+3)*4`; the brackets around a negative number do not count, and two
+   *  numbers have no room for a group. Brackets may appear without this when
+   *  precedence requires them - the alternative would be a task that does
+   *  not evaluate to its answer. */
   brackets?: boolean
   /** Fill `quizOptions` with the answer and three near misses. */
   quizMode?: boolean
