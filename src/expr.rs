@@ -227,6 +227,16 @@ fn bracket(expr: &Expr, out: &mut Vec<Token>) {
     out.push(Token::Close);
 }
 
+/// Whether the task groups part of itself in brackets, as in `(2+3)*4`. The
+/// brackets a negative number carries, as in `7-(-5)`, are not a group: they
+/// open straight onto that number, where a group opens onto a number of 0 or
+/// more or onto another bracket.
+fn has_group(tokens: &[Token]) -> bool {
+    tokens
+        .windows(2)
+        .any(|pair| pair[0] == Token::Open && !matches!(pair[1], Token::Num(n) if n < 0))
+}
+
 /// Only the tests and the doc examples need the task as one string; the
 /// wrapper is handed the token array.
 #[cfg(test)]
@@ -424,8 +434,9 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
     // `brackets` asks for a shape, not a different answer, so the whole task
     // is simply drawn again until the shape appears. If it does not after a
     // few tries the last one is returned: a task that evaluates correctly
-    // without brackets beats no task at all.
-    let attempts = if config.brackets && config.ops.can_need_brackets() {
+    // without brackets beats no task at all. A group needs a sum or product
+    // inside another one, so two numbers can never have one.
+    let attempts = if config.brackets && config.ops.can_need_brackets() && wanted >= 3 {
         24
     } else {
         1
@@ -449,7 +460,7 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         }
         tokens.clear();
         expr.write(tokens);
-        if !config.brackets || tokens.contains(&Token::Open) {
+        if !config.brackets || has_group(tokens) {
             return Some(expr);
         }
         last = Some(expr);
@@ -468,7 +479,7 @@ mod tests {
     }
 
     fn has_brackets(expr: &Expr) -> bool {
-        expr.tokens().contains(&Token::Open)
+        has_group(&expr.tokens())
     }
 
     /// A parser written independently of the renderer: if the two agree on
@@ -837,6 +848,73 @@ mod tests {
             produced > 380,
             "brackets requested 400 times, produced {produced}"
         );
+    }
+
+    #[test]
+    fn the_brackets_of_a_negative_number_are_not_a_group() {
+        use Token::{Close, Num, Open};
+        let sum = Token::Op(Op::Add);
+        let difference = Token::Op(Op::Sub);
+        let product = Token::Op(Op::Mul);
+        // 7-(-5)
+        assert!(!has_group(&[Num(7), difference, Open, Num(-5), Close]));
+        // (-2)*(-3)
+        assert!(!has_group(&[
+            Open,
+            Num(-2),
+            Close,
+            product,
+            Open,
+            Num(-3),
+            Close
+        ]));
+        // (2+3)*4
+        assert!(has_group(&[
+            Open,
+            Num(2),
+            sum,
+            Num(3),
+            Close,
+            product,
+            Num(4)
+        ]));
+        // ((-2)+5)*3
+        assert!(has_group(&[
+            Open,
+            Open,
+            Num(-2),
+            Close,
+            sum,
+            Num(5),
+            Close,
+            product,
+            Num(3)
+        ]));
+    }
+
+    #[test]
+    fn brackets_bring_a_group_whenever_there_is_room_for_one() {
+        for length in 3..=12 {
+            for negatives in [true, false] {
+                for seed in 0..300 {
+                    let expr = build(
+                        &Config {
+                            answer: 12,
+                            length,
+                            brackets: true,
+                            ops: Ops::ALL,
+                            negatives,
+                        },
+                        &mut Rng::new(seed),
+                    );
+                    assert!(
+                        has_brackets(&expr),
+                        "no group in {} (length {length}, seed {seed})",
+                        render(&expr.tokens())
+                    );
+                }
+            }
+        }
     }
 
     #[test]

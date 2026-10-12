@@ -158,11 +158,18 @@ const suite = (mathGen, mathGenBatch) => {
   })
 
   check('brackets: true delivers a bracketed group', () => {
-    let bracketed = 0
-    for (let seed = 0; seed < 500; seed++) {
-      if (mathGen(5, { brackets: true, seed }).task.includes('(')) bracketed++
+    // A group, as in (2+3)*4, and not only the brackets around a negative
+    // number, as in 7-(-5).
+    const group = (task) => task.some((token, i) =>
+      token === '(' && !(typeof task[i + 1] === 'number' && task[i + 1] < 0))
+    for (let length = 3; length <= 8; length++) {
+      for (const negatives of [true, false]) {
+        for (let seed = 0; seed < 200; seed++) {
+          const { task } = mathGen(length, { brackets: true, negatives, seed })
+          assert.ok(group(task), `no group in ${task.join('')}`)
+        }
+      }
     }
-    assert.ok(bracketed > 475, `asked 500 times, got ${bracketed}`)
   })
 
   check('the task is made only of numbers, operators and brackets', () => {
