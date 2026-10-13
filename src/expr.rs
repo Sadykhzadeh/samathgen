@@ -1,23 +1,17 @@
 //! Expression generation.
 //!
-//! The TypeScript version built a task by splicing a sub-expression in place
-//! of an operand and then printing the pieces flat. Nothing told it that
-//! `2 * 11` cannot simply become `2 * 9 + 2`, so operator precedence changed
-//! the value and about 6% of generated tasks did not evaluate to the answer
-//! they reported. `genValidOperator` tried to forbid the combinations that
-//! would break, which is the hard way round and it never closed the gap.
-//!
-//! Here the task is a tree. Every split replaces a leaf holding `v` with a
-//! node that evaluates to exactly `v`, so the root keeps its value whatever
-//! the shape. Parentheses are then placed by precedence when the text is
-//! produced. Both halves are exact, so `eval(text) == answer` holds by
-//! construction rather than by luck.
+//! The task is a tree. Every split replaces a leaf holding `v` with a node
+//! that evaluates to exactly `v`, so the root keeps its value whatever the
+//! shape. Brackets are then placed by precedence when the text is produced,
+//! and kept wherever leaving them out would take a step of working the task
+//! out of bounds. Both halves are exact, so `eval(text) == answer` holds by
+//! construction.
 
 use crate::rng::Rng;
 
-/// Leaves and intermediate values stay inside this, so the numbers remain
-/// readable and nothing can overflow on the way. An answer past it cannot be
-/// split at all, so the wrappers refuse one.
+/// Every number in a task, and every step of working it out, stays inside
+/// this, so the numbers remain readable and nothing can overflow on the way.
+/// An answer past it cannot be split at all, so the wrappers refuse one.
 pub const MAX_ABS: i64 = 10_000;
 /// How far `+` and `-` reach for their second operand.
 const OFFSET_MAX: i64 = 30;
@@ -50,6 +44,16 @@ impl Op {
         match self {
             Op::Add | Op::Sub => 1,
             Op::Mul | Op::Div => 2,
+        }
+    }
+
+    fn apply(self, l: i64, r: i64) -> i64 {
+        match self {
+            Op::Add => l + r,
+            Op::Sub => l - r,
+            Op::Mul => l * r,
+            // Every division introduced here is exact, so this is too.
+            Op::Div => l / r,
         }
     }
 
@@ -120,16 +124,7 @@ impl Expr {
     pub fn value(&self) -> i64 {
         match self {
             Expr::Num(n) => *n,
-            Expr::Binary { op, left, right } => {
-                let (l, r) = (left.value(), right.value());
-                match op {
-                    Op::Add => l + r,
-                    Op::Sub => l - r,
-                    Op::Mul => l * r,
-                    // Every division introduced here is exact, so this is too.
-                    Op::Div => l / r,
-                }
-            }
+            Expr::Binary { op, left, right } => op.apply(left.value(), right.value()),
         }
     }
 
@@ -181,12 +176,29 @@ impl Expr {
     #[cfg(test)]
     pub fn tokens(&self) -> Vec<Token> {
         let mut out = Vec::new();
-        self.write(&mut out);
+        self.write(&mut out, -MAX_ABS, MAX_ABS);
         out
     }
 
-    pub fn write(&self, out: &mut Vec<Token>) {
-        match self {
+    /// Writes the task with brackets placed by precedence, and around any
+    /// part that would take a step of working it out below `low` or above
+    /// `high`.
+    pub fn write(&self, out: &mut Vec<Token>, low: i64, high: i64) {
+        self.write_steps(out, low, high);
+    }
+
+    /// Writes this subtree and returns its value, with the lowest and the
+    /// highest value a pupil meets working out its chain of operators of
+    /// one precedence from left to right: the first number and every
+    /// running result after it.
+    ///
+    /// Every node of the tree is within bounds, and a chain written left to
+    /// right only passes through nodes. A right operand written flat is
+    /// different: `a+(b-c)` is written `a+b-c` and passes through `a+b`,
+    /// and `a*(b/c)` passes through `a*b`, neither of them a node. Such an
+    /// operand keeps its brackets when one of those steps is out of bounds.
+    fn write_steps(&self, out: &mut Vec<Token>, low: i64, high: i64) -> (i64, i64, i64) {
+        let (op, left, right) = match self {
             Expr::Num(n) => {
                 if *n < 0 {
                     out.push(Token::Open);
@@ -195,36 +207,54 @@ impl Expr {
                 } else {
                     out.push(Token::Num(*n));
                 }
+                return (*n, *n, *n);
             }
-            Expr::Binary { op, left, right } => {
-                let precedence = op.precedence();
+            Expr::Binary { op, left, right } => (*op, left, right),
+        };
+        let precedence = op.precedence();
 
-                if left.precedence() < precedence {
-                    bracket(left, out);
-                } else {
-                    left.write(out);
-                }
+        let open_left = left.precedence() < precedence;
+        if open_left {
+            out.push(Token::Open);
+        }
+        let (l, mut lowest, mut highest) = left.write_steps(out, low, high);
+        if open_left {
+            out.push(Token::Close);
+        }
+        if left.precedence() != precedence {
+            // Worked out on its own: only its value carries on.
+            (lowest, highest) = (l, l);
+        }
 
-                out.push(Token::Op(*op));
+        out.push(Token::Op(op));
 
-                let right_precedence = right.precedence();
-                let needs_brackets = right_precedence < precedence
-                    || (right_precedence == precedence
-                        && op.right_operand_needs_brackets_at_equal_precedence());
-                if needs_brackets {
-                    bracket(right, out);
-                } else {
-                    right.write(out);
-                }
+        let right_precedence = right.precedence();
+        let start = out.len();
+        let (r, right_lowest, right_highest) = right.write_steps(out, low, high);
+        let mut grouped = right_precedence < precedence
+            || (right_precedence == precedence
+                && op.right_operand_needs_brackets_at_equal_precedence());
+        if right_precedence == precedence && !grouped {
+            // Written flat, every step of the right operand's chain is
+            // taken from l: a+b-c passes through a+b. The steps run from
+            // l op lowest to l op highest, one way round or the other.
+            let (a, b) = (op.apply(l, right_lowest), op.apply(l, right_highest));
+            let (first, last) = (a.min(b), a.max(b));
+            if first < low || last > high {
+                grouped = true;
+            } else {
+                lowest = lowest.min(first);
+                highest = highest.max(last);
             }
         }
-    }
-}
+        if grouped {
+            out.insert(start, Token::Open);
+            out.push(Token::Close);
+        }
 
-fn bracket(expr: &Expr, out: &mut Vec<Token>) {
-    out.push(Token::Open);
-    expr.write(out);
-    out.push(Token::Close);
+        let value = op.apply(l, r);
+        (value, lowest.min(value), highest.max(value))
+    }
 }
 
 /// Whether the task groups part of itself in brackets, as in `(2+3)*4`. The
@@ -442,6 +472,7 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         1
     };
     let mut last = None;
+    let low = if config.negatives { -MAX_ABS } else { 0 };
 
     for _ in 0..attempts {
         let mut expr = Expr::Num(config.answer);
@@ -459,7 +490,7 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
             return None;
         }
         tokens.clear();
-        expr.write(tokens);
+        expr.write(tokens, low, MAX_ABS);
         if !config.brackets || has_group(tokens) {
             return Some(expr);
         }
@@ -489,9 +520,10 @@ mod tests {
     struct Parser<'a> {
         tokens: &'a [Token],
         at: usize,
-        /// The lowest value met on the way: every number, and every running
-        /// result as the task is worked out left to right.
+        /// The lowest and highest values met on the way: every number, and
+        /// every running result as the task is worked out left to right.
         lowest: i64,
+        highest: i64,
     }
 
     impl<'a> Parser<'a> {
@@ -500,18 +532,25 @@ mod tests {
         }
 
         fn parse_with_lowest(tokens: &'a [Token]) -> (i64, i64) {
+            let (value, lowest, _) = Parser::parse_with_steps(tokens);
+            (value, lowest)
+        }
+
+        fn parse_with_steps(tokens: &'a [Token]) -> (i64, i64, i64) {
             let mut parser = Parser {
                 tokens,
                 at: 0,
                 lowest: i64::MAX,
+                highest: i64::MIN,
             };
             let value = parser.sum();
             assert_eq!(parser.at, tokens.len(), "trailing tokens in {:?}", tokens);
-            (value, parser.lowest)
+            (value, parser.lowest, parser.highest)
         }
 
         fn saw(&mut self, value: i64) -> i64 {
             self.lowest = self.lowest.min(value);
+            self.highest = self.highest.max(value);
             value
         }
 
@@ -768,6 +807,40 @@ mod tests {
     }
 
     #[test]
+    fn no_step_of_working_a_task_out_passes_the_bounds() {
+        // a*(b/c) written flat as a*b/c passes through a*b, which for
+        // 2*(5600/10) is 11200.
+        for answer in [
+            -MAX_ABS, -5000, -1000, -100, 0, 17, 100, 1000, 5000, MAX_ABS,
+        ] {
+            for negatives in [true, false] {
+                if !negatives && answer < 0 {
+                    continue;
+                }
+                for length in [3, 4, 6, 8, 12, 16, 32] {
+                    for seed in 0..60 {
+                        let config = Config {
+                            answer,
+                            length,
+                            brackets: seed % 2 == 0,
+                            ops: Ops::ALL,
+                            negatives,
+                        };
+                        let mut tokens = Vec::new();
+                        generate(&config, &mut Rng::new(seed), &mut tokens).unwrap();
+                        let (value, lowest, highest) = Parser::parse_with_steps(&tokens);
+                        let text = render(&tokens);
+                        assert_eq!(value, answer, "{text}");
+                        let floor = if negatives { -MAX_ABS } else { 0 };
+                        assert!(lowest >= floor, "{text} goes down to {lowest}");
+                        assert!(highest <= MAX_ABS, "{text} goes up to {highest}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn negatives_appear_unless_they_are_ruled_out() {
         // The switch must not have turned them off for everyone else.
         let negative_somewhere = (0..500).any(|seed| {
@@ -985,6 +1058,20 @@ mod tests {
             }),
         };
         assert_eq!(render(&flat.tokens()), "10+3-1");
+
+        // a * (b / c) is written flat while a * b stays in bounds
+        let quotient = |numerator| Expr::Binary {
+            op: Op::Div,
+            left: Box::new(Expr::Num(numerator)),
+            right: Box::new(Expr::Num(10)),
+        };
+        let product = |numerator| Expr::Binary {
+            op: Op::Mul,
+            left: Box::new(Expr::Num(2)),
+            right: Box::new(quotient(numerator)),
+        };
+        assert_eq!(render(&product(50).tokens()), "2*50/10");
+        assert_eq!(render(&product(5600).tokens()), "2*(5600/10)");
 
         // a negative leaf brings its own, or "7--5" would not parse
         let negative = Expr::Binary {
