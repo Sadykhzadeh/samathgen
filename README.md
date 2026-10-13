@@ -90,7 +90,7 @@ is not a number at all is a `TypeError`.
 | --- | --- | --- |
 | `answer` | a random integer in `10..=20` | The value the task must evaluate to, a whole number from `-10000` to `10000`. `0` is honoured. |
 | `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. |
-| `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses. |
+| `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses, each within `5` of it. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
 | `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. A whole number from `0` to `Number.MAX_SAFE_INTEGER`. |
@@ -126,7 +126,7 @@ Returns:
 | --- | --- | --- |
 | `task` | `Array<number \| '+' \| '-' \| '*' \| '/' \| '(' \| ')'>` | The task, token by token. |
 | `answer` | `number` | What the task evaluates to. |
-| `quizOptions` | `number[]` | Four options including the answer, shuffled. Empty unless `quizMode`. |
+| `quizOptions` | `number[]` | Four options including the answer, shuffled. The answer is as likely to be the smallest of them as the largest or either between, so their sizes give it away no more than their order does; with `negatives: false` an answer below `3` has fewer options below it. Empty unless `quizMode`. |
 
 **`task.join('')` always evaluates to `answer`.** That is the contract, and it
 is checked over 200 000 generated tasks per entry point on every build.

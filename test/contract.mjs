@@ -171,6 +171,18 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('where the answer falls among the options gives nothing away', () => {
+    // As often the smallest of the four as the largest or either between,
+    // so picking by size is right one time in four and no more.
+    const ranks = [0, 0, 0, 0]
+    for (let seed = 0; seed < 20000; seed++) {
+      const { answer, quizOptions } = mathGen(2 + (seed % 7), { quizMode: true, seed })
+      ranks[quizOptions.filter((option) => option < answer).length]++
+      assert.ok(quizOptions.every((option) => Math.abs(option - answer) <= 5), `${quizOptions} for ${answer}`)
+    }
+    for (const count of ranks) assert.ok(Math.abs(count - 5000) < 400, `ranks ${ranks}`)
+  })
+
   check('without quizMode there are no options', () => {
     assert.deepEqual(mathGen(3, { seed: 1 }).quizOptions, [])
     assert.deepEqual(mathGen(3, { seed: 1, quizMode: false }).quizOptions, [])
