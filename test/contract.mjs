@@ -350,6 +350,85 @@ const suite = (mathGen, mathGenBatch) => {
     assert.equal(mathGen(5, { answer: 5, negatives: false, operators: ['+'], seed: 2 }).task.join(''), '1+1+1+1+1')
   })
 
+  check('max keeps every number, step and option within it', () => {
+    // Each number, and each running result as a pupil works the task out:
+    // * and / first, then left to right.
+    const steps = (task) => {
+      let at = 0
+      const seen = []
+      const saw = (value) => (seen.push(value), value)
+      const atom = () => {
+        const token = task[at++]
+        if (token !== '(') return saw(token)
+        const value = sum()
+        at++
+        return value
+      }
+      const product = () => {
+        let value = atom()
+        while (task[at] === '*' || task[at] === '/') {
+          const op = task[at++]
+          const right = atom()
+          value = saw(op === '*' ? value * right : value / right)
+        }
+        return value
+      }
+      const sum = () => {
+        let value = product()
+        while (task[at] === '+' || task[at] === '-') {
+          const op = task[at++]
+          const right = product()
+          value = saw(op === '+' ? value + right : value - right)
+        }
+        return value
+      }
+      sum()
+      return seen
+    }
+    for (const max of [10, 20, 100]) {
+      for (const negatives of [true, false]) {
+        const floor = negatives ? -max : 0
+        for (let seed = 0; seed < 600; seed++) {
+          const length = 2 + (seed % 9)
+          const result = mathGen(length, { max, negatives, seed, quizMode: true, brackets: seed % 2 === 0 })
+          const text = result.task.join('')
+          // eslint-disable-next-line no-eval
+          assert.equal(eval(text), result.answer, text)
+          assert.equal(result.task.filter((t) => typeof t === 'number').length, length, text)
+          for (const value of [...steps(result.task), ...result.quizOptions]) {
+            assert.ok(value >= floor && value <= max, `${value} in ${text} ${result.quizOptions}, max ${max}`)
+          }
+        }
+      }
+    }
+  })
+
+  check('without an answer, a max below 20 draws one from half of it up to it', () => {
+    for (const [max, low, high] of [[10, 5, 10], [13, 7, 13], [20, 10, 20], [10000, 10, 20]]) {
+      const drawn = new Set(mathGenBatch(500, 3, { max, seed: 1 }).map((task) => task.answer))
+      assert.deepEqual([...drawn].sort((a, b) => a - b), Array.from({ length: high - low + 1 }, (_, i) => low + i), `max ${max}`)
+    }
+  })
+
+  check('a max it cannot honour is refused', () => {
+    for (const max of [9, 0, -20, 10001, 12.5, NaN, Infinity]) {
+      assert.throws(() => mathGen(3, { max }), RangeError, `max ${max}`)
+      assert.throws(() => mathGenBatch(2, 3, { max }), RangeError, `max ${max}`)
+    }
+    for (const max of ['20', {}, true]) {
+      assert.throws(() => mathGen(3, { max }), TypeError, `max ${JSON.stringify(max)}`)
+    }
+    assert.throws(() => mathGen(3, { max: 20, answer: 21 }), /from -20 to 20, got 21/)
+    assert.throws(() => mathGen(3, { max: 20, answer: 11, operators: ['/'] }), /evaluating to 11 can be built from \/ within 20/)
+    assert.throws(
+      () => mathGen(11, { max: 10, operators: ['+'], negatives: false }),
+      /11 terms evaluating to an answer from 5 to 10 can be built from \+ without negative numbers within 10$/
+    )
+    for (let seed = 0; seed < 100; seed++) {
+      assert.deepEqual(mathGen(5, { seed, max: 10000, quizMode: true }), mathGen(5, { seed, max: null, quizMode: true }))
+    }
+  })
+
   check('the CLI wire format still parses', () => {
     // SaMathAPI sends "<task> <opt1>,<opt2>,<opt3>,<opt4> <answer>" and
     // SaMathCLI splits it on spaces and commas, so no token may contain either.

@@ -12,15 +12,22 @@ use crate::rng::Rng;
 const WINDOW: usize = 6;
 pub const COUNT: usize = 4;
 
-/// No option is below `floor`, so a task without negative numbers does not
-/// offer one as a possible answer. Within three of the floor there is not
+/// No option is below `floor` or above `ceiling`, so a task without
+/// negative numbers does not offer one as a possible answer, and one kept to
+/// a max does not offer one past it. Within three of either end there is not
 /// room for every rank, and the answer takes the ranks there is room for,
-/// each as likely as the others.
-pub fn quiz_options(answer: i64, floor: i64, rng: &mut Rng) -> Vec<i64> {
-    // How many options are below the answer. Every number from the floor up
-    // to the answer is a place for one, and there are three to place.
-    let reach = answer.saturating_sub(floor);
-    let rank = rng.below(reach.min(COUNT as i64 - 1) as u64 + 1) as usize;
+/// each as likely as the others. The two are at least 3 apart, so there is
+/// always room for four.
+pub fn quiz_options(answer: i64, floor: i64, ceiling: i64, rng: &mut Rng) -> Vec<i64> {
+    // How many options are below the answer: no more than there are numbers
+    // from the floor up to it, and no fewer than do not fit between it and
+    // the ceiling.
+    let below = answer.saturating_sub(floor);
+    let above = ceiling.saturating_sub(answer);
+    let last = COUNT as i64 - 1;
+    let fewest = last - above.min(last);
+    let most = below.min(last);
+    let rank = (fewest + rng.below((most - fewest) as u64 + 1) as i64) as usize;
 
     // Four numbers in a row always fit, so this ends.
     let mut window: [i64; WINDOW] = [0, 1, 2, 3, 4, 5];
@@ -28,7 +35,7 @@ pub fn quiz_options(answer: i64, floor: i64, rng: &mut Rng) -> Vec<i64> {
         rng.shuffle(&mut window);
         let pattern = &mut window[..COUNT];
         pattern.sort_unstable();
-        if pattern[rank] - pattern[0] <= reach {
+        if pattern[rank] - pattern[0] <= below && pattern[COUNT - 1] - pattern[rank] <= above {
             break pattern;
         }
     };
@@ -53,7 +60,7 @@ mod tests {
         for seed in 0..5000 {
             let mut rng = Rng::new(seed);
             let answer = (seed as i64) % 97 - 48;
-            let options = quiz_options(answer, i64::MIN, &mut rng);
+            let options = quiz_options(answer, i64::MIN, i64::MAX, &mut rng);
             assert_eq!(options.len(), COUNT);
             let mut sorted = options.clone();
             sorted.sort();
@@ -67,7 +74,7 @@ mod tests {
         for seed in 0..5000 {
             let mut rng = Rng::new(seed);
             let answer = (seed as i64) % 31 - 15;
-            assert!(quiz_options(answer, i64::MIN, &mut rng).contains(&answer));
+            assert!(quiz_options(answer, i64::MIN, i64::MAX, &mut rng).contains(&answer));
         }
     }
 
@@ -75,7 +82,7 @@ mod tests {
     fn every_option_is_near_the_answer() {
         for seed in 0..5000 {
             let mut rng = Rng::new(seed);
-            let options = quiz_options(-10_000, i64::MIN, &mut rng);
+            let options = quiz_options(-10_000, i64::MIN, i64::MAX, &mut rng);
             let furthest = options.iter().map(|o| (o + 10_000).abs()).max().unwrap();
             assert!(furthest < WINDOW as i64, "{options:?}");
         }
@@ -86,7 +93,7 @@ mod tests {
         for seed in 0..5000 {
             let mut rng = Rng::new(seed);
             let answer = (seed as i64) % 8;
-            let options = quiz_options(answer, 0, &mut rng);
+            let options = quiz_options(answer, 0, i64::MAX, &mut rng);
             assert!(options.iter().all(|&o| o >= 0), "{options:?} for {answer}");
             assert!(options.contains(&answer));
             let mut sorted = options.clone();
@@ -101,7 +108,7 @@ mod tests {
         let mut positions = [0u32; COUNT];
         for seed in 0..8000 {
             let mut rng = Rng::new(seed);
-            let options = quiz_options(12, i64::MIN, &mut rng);
+            let options = quiz_options(12, i64::MIN, i64::MAX, &mut rng);
             let at = options.iter().position(|o| *o == 12).unwrap();
             positions[at] += 1;
         }
@@ -120,7 +127,7 @@ mod tests {
         let mut by_shape = std::collections::HashMap::new();
         for seed in 0..60_000 {
             let mut rng = Rng::new(seed);
-            let mut options = quiz_options(12, i64::MIN, &mut rng);
+            let mut options = quiz_options(12, i64::MIN, i64::MAX, &mut rng);
             let at = rank(&options, 12);
             options.sort();
             let shape: Vec<i64> = options.iter().map(|o| o - options[0]).collect();
@@ -141,12 +148,12 @@ mod tests {
         // 0 can only be the smallest; 2 can be any but the largest, since
         // only 0 and 1 are below it.
         for seed in 0..1000 {
-            let options = quiz_options(0, 0, &mut Rng::new(seed));
+            let options = quiz_options(0, 0, i64::MAX, &mut Rng::new(seed));
             assert_eq!(rank(&options, 0), 0, "{options:?}");
         }
         let mut ranks = [0u32; COUNT];
         for seed in 0..9000 {
-            let options = quiz_options(2, 0, &mut Rng::new(seed));
+            let options = quiz_options(2, 0, i64::MAX, &mut Rng::new(seed));
             ranks[rank(&options, 2)] += 1;
         }
         assert!(
@@ -154,5 +161,34 @@ mod tests {
             "{ranks:?}"
         );
         assert_eq!(ranks[3], 0, "{ranks:?}");
+    }
+
+    #[test]
+    fn near_the_ceiling_too() {
+        // 20 under a ceiling of 20 can only be the largest, and 18 can be
+        // anything but the smallest.
+        for seed in 0..1000 {
+            let options = quiz_options(20, 0, 20, &mut Rng::new(seed));
+            assert!(options.iter().all(|&o| o <= 20), "{options:?}");
+            assert_eq!(rank(&options, 20), COUNT - 1, "{options:?}");
+        }
+        let mut ranks = [0u32; COUNT];
+        for seed in 0..9000 {
+            let options = quiz_options(18, 0, 20, &mut Rng::new(seed));
+            assert!(options.iter().all(|&o| o <= 20), "{options:?}");
+            ranks[rank(&options, 18)] += 1;
+        }
+        assert_eq!(ranks[0], 0, "{ranks:?}");
+        assert!(
+            ranks[1..].iter().all(|&count| count.abs_diff(3000) < 300),
+            "{ranks:?}"
+        );
+        // The narrowest room there is: 0 to 3 under negatives: false and a
+        // ceiling of 3 has exactly four options to offer.
+        for answer in 0..=3 {
+            let mut options = quiz_options(answer, 0, 3, &mut Rng::new(answer as u64));
+            options.sort();
+            assert_eq!(options, [0, 1, 2, 3]);
+        }
     }
 }

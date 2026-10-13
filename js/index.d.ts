@@ -4,21 +4,21 @@
 export type Operators = '+' | '-' | '*' | '/'
 
 /** A bracket, which appears wherever operator precedence requires one, or
- *  where a step of working the task out would otherwise pass 10000. */
+ *  where a step of working the task out would otherwise pass max. */
 export type Bracket = '(' | ')'
 
 export interface MathGenOptions {
-  /** The value the task must evaluate to: a whole number from -10000 to
-   *  10000, 0 included. Anything else throws a RangeError (or a TypeError
-   *  for a value that is not a number). Default: a random integer in
-   *  10..=20. */
+  /** The value the task must evaluate to: a whole number from -max to max,
+   *  0 included. Anything else throws a RangeError (or a TypeError for a
+   *  value that is not a number). Default: a random integer in 10..=20, or
+   *  from half of max up to max when max is below 20. */
   answer?: number
   /** Ask for a task that groups part of itself in brackets, as in
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
    *  numbers have no room for a group. Brackets may appear without this when
    *  precedence requires them - the alternative would be a task that does
    *  not evaluate to its answer - or to keep every step of working the task
-   *  out within 10000 either side. */
+   *  out within max. */
   brackets?: boolean
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. */
@@ -26,12 +26,19 @@ export interface MathGenOptions {
   /** The operators the task may use, e.g. `['+', '-']`. Default: all four.
    *  Throws a RangeError for an unknown or empty list, and for the two
    *  combinations that cannot build a task: an answer of 0 without `+` or
-   *  `-`, and an answer past 5000 either side with `/` alone. */
+   *  `-`, and an answer past half of max either side with `/` alone. */
   operators?: Operators[]
   /** Set to false to keep every number, every quiz option and every step of
    *  working the task out left to right at 0 or above. A negative answer
    *  then throws a RangeError. Default: true. */
   negatives?: boolean
+  /** How far from zero any number may be: every number in the task, every
+   *  step of working it out left to right and every quiz option. A whole
+   *  number from 10 to 10000; anything else throws a RangeError (or a
+   *  TypeError for a value that is not a number). It also bounds the
+   *  answer, which without one is drawn from half of max up to max when max
+   *  is below 20. Default: 10000. */
+  max?: number
   /** Pin the generator, so the same seed gives the same task: a whole number
    *  from 0 to Number.MAX_SAFE_INTEGER. Anything else throws a RangeError
    *  (or a TypeError for a value that is not a finite number) rather than
