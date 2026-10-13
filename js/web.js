@@ -6,9 +6,9 @@ import initWasm, { generate, generate_batch as generateBatch } from '../dist/web
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
-// Every number in a task stays within this, so an answer past it cannot be
-// split at all. The same rules as js/node.cjs; test/contract.mjs holds the
-// two entry points to the same output.
+// Every number in a task stays within this, or within a smaller max, so an
+// answer past it cannot be split at all. The same rules as js/node.cjs;
+// test/contract.mjs holds the two entry points to the same output.
 const ANSWER_LIMIT = 10000
 
 // A task comes back as integers, not JSON: [answer, option count,
@@ -51,16 +51,35 @@ const clampLength = (length) => {
   return Math.min(Math.max(Math.trunc(length), LENGTH_MIN), LENGTH_MAX)
 }
 
-const readAnswer = (answer) => {
+const readAnswer = (answer, max) => {
   if (answer === undefined || answer === null) return undefined
   if (typeof answer !== 'number') {
     throw new TypeError(`answer must be a number, got ${typeof answer}`)
   }
-  if (!Number.isInteger(answer) || Math.abs(answer) > ANSWER_LIMIT) {
-    throw new RangeError(`answer must be a whole number from -${ANSWER_LIMIT} to ${ANSWER_LIMIT}, got ${answer}`)
+  if (!Number.isInteger(answer) || Math.abs(answer) > max) {
+    throw new RangeError(`answer must be a whole number from -${max} to ${max}, got ${answer}`)
   }
   return answer
 }
+
+// The smallest max, the furthest from zero any number in a task may be:
+// numbers up to 10 are where a class starts.
+const MAX_MIN = 10
+
+const readMax = (max) => {
+  if (max === undefined || max === null) return ANSWER_LIMIT
+  if (typeof max !== 'number') {
+    throw new TypeError(`max must be a number, got ${typeof max}`)
+  }
+  if (!Number.isInteger(max) || max < MAX_MIN || max > ANSWER_LIMIT) {
+    throw new RangeError(`max must be a whole number from ${MAX_MIN} to ${ANSWER_LIMIT}, got ${max}`)
+  }
+  return max
+}
+
+// Without an answer one is drawn from 10 to 20, or under a max below 20 from
+// half the max up to the max. src/lib.rs draws it.
+const defaultAnswers = (max) => max >= 20 ? 'an answer from 10 to 20' : `an answer from ${Math.floor((max + 1) / 2)} to ${max}`
 
 // One bit per operator, in the order src/expr.rs numbers them, and one more
 // for ruling out negative numbers.
@@ -96,11 +115,12 @@ const readAllowed = (options, answer) => {
 
 // A few combinations of answer, length and rules cannot be built at all;
 // the README lists them, and src/expr.rs says why.
-const cannotBuild = (length, answer, options) => new RangeError(
+const cannotBuild = (length, answer, max, options) => new RangeError(
   `no task of ${clampLength(length)} terms evaluating to ` +
-  `${answer === undefined ? 'an answer from 10 to 20' : answer} can be built from ` +
+  `${answer === undefined ? defaultAnswers(max) : answer} can be built from ` +
   `${(options.operators || OPERATORS.split('')).join(' ')}` +
-  `${options.negatives === false ? ' without negative numbers' : ''}`
+  `${options.negatives === false ? ' without negative numbers' : ''}` +
+  `${max < ANSWER_LIMIT ? ` within ${max}` : ''}`
 )
 
 // Task i of a batch is the task for seed + i, which only holds for whole
@@ -148,7 +168,8 @@ const assertReady = () => {
 export const mathGen = (length, more) => {
   assertReady()
   const options = more || {}
-  const answer = readAnswer(options.answer)
+  const max = readMax(options.max)
+  const answer = readAnswer(options.answer, max)
   const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
@@ -159,9 +180,10 @@ export const mathGen = (length, more) => {
     options.brackets === true,
     options.quizMode === true,
     allowed,
+    max,
     seed
   )
-  if (data.length === 0) throw cannotBuild(length, answer, options)
+  if (data.length === 0) throw cannotBuild(length, answer, max, options)
   return decode(data, 0)
 }
 
@@ -176,7 +198,8 @@ export const mathGenBatch = (count, length, more) => {
     throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${count}`)
   }
   const options = more || {}
-  const answer = readAnswer(options.answer)
+  const max = readMax(options.max)
+  const answer = readAnswer(options.answer, max)
   const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
@@ -188,9 +211,10 @@ export const mathGenBatch = (count, length, more) => {
     options.brackets === true,
     options.quizMode === true,
     allowed,
+    max,
     seed
   )
-  if (data.length === 0 && count > 0) throw cannotBuild(length, answer, options)
+  if (data.length === 0 && count > 0) throw cannotBuild(length, answer, max, options)
   const tasks = new Array(count)
   let at = 0
   for (let i = 0; i < count; i++) {

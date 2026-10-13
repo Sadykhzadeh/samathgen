@@ -89,37 +89,44 @@ is not a number at all is a `TypeError`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `answer` | a random integer in `10..=20` | The value the task must evaluate to, a whole number from `-10000` to `10000`. `0` is honoured. |
+| `answer` | a random integer in `10..=20`, or from half of `max` up to `max` when that is below `20` | The value the task must evaluate to, a whole number from `-max` to `max`. `0` is honoured. |
 | `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses, each within `5` of it. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
+| `max` | `10000` | How far from zero any number may be: every number in the task, every step of working it out left to right and every quiz option. A whole number from `10` to `10000`, so `max: 20` is a task within twenty. |
 | `seed` | drawn from `Math.random` | Pin the generator: the same seed always gives the same task. A whole number from `0` to `Number.MAX_SAFE_INTEGER`. |
 
 An option that is given but cannot be honoured throws instead of being
-quietly replaced: an `answer` or `seed` outside the range above or with a
-fraction is a `RangeError`, and a `length`, `answer` or `seed` that is not a
-number is a `TypeError`. `null` and `undefined` mean the default.
+quietly replaced: an `answer`, `max` or `seed` outside the range above or
+with a fraction is a `RangeError`, and a `length`, `answer`, `max` or `seed`
+that is not a number is a `TypeError`. `null` and `undefined` mean the
+default.
 
 A few combinations cannot be built at all, and throw a `RangeError` rather
 than return a shorter task:
 
 - an `answer` of `0` without `+` or `-` (zero is not a product or a quotient
   of anything but zero), or without `-` once `negatives` is `false`;
-- an `answer` past `5000` either side with `/` alone, since its numerator
-  would pass `10000`;
+- an `answer` past half of `max` either side with `/` alone, since its
+  numerator would pass `max`;
 - with `negatives: false`, a negative `answer`, `+` alone with an `answer`
   smaller than `length` (every term is at least 1), and an `answer` of
-  `10000` with neither `+` nor `*`.
+  `max` itself with neither `+` nor `*`.
 
 With `*` alone a prime answer can only become `1 * p`, so expect plenty of
 ones. By default about one task in three of length 3 contains a negative
 number, and one in two of length 5.
 
 ```js
-// adding and taking away, nothing below zero
-mathGen(3, { operators: ['+', '-'], negatives: false })
+// adding and taking away within twenty, nothing below zero
+mathGen(3, { operators: ['+', '-'], negatives: false, max: 20 })
 ```
+
+Without a `max`, numbers run well past the answer: with answers from 10 to
+20, a number past 100 turns up in 10% of tasks of two numbers and 34% of
+tasks of eight, and adding and taking away without negatives passes 20 in
+57% of tasks of three. With `max: 20` none of them does.
 
 Returns:
 
@@ -127,7 +134,7 @@ Returns:
 | --- | --- | --- |
 | `task` | `Array<number \| '+' \| '-' \| '*' \| '/' \| '(' \| ')'>` | The task, token by token. |
 | `answer` | `number` | What the task evaluates to. |
-| `quizOptions` | `number[]` | Four options including the answer, shuffled. The answer is as likely to be the smallest of them as the largest or either between, so their sizes give it away no more than their order does; with `negatives: false` an answer below `3` has fewer options below it. Empty unless `quizMode`. |
+| `quizOptions` | `number[]` | Four options including the answer, shuffled. The answer is as likely to be the smallest of them as the largest or either between, so their sizes give it away no more than their order does; with `negatives: false` an answer below `3` has fewer options below it, and one above `max - 3` has fewer above it. Empty unless `quizMode`. |
 
 **`task.join('')` always evaluates to `answer`.** That is the contract, and it
 is checked over 200 000 generated tasks per entry point on every build.
@@ -135,8 +142,8 @@ is checked over 200 000 generated tasks per entry point on every build.
 Note that brackets can appear even with `brackets: false`, wherever operator
 precedence requires them. The alternative would be a task that does not
 evaluate to its answer. They are also kept where leaving them out would take
-a step of working the task out past `10000` either side: `2*(5600/10)`
-rather than `2*5600/10`, which passes through `11200`.
+a step of working the task out past `max` either side: `2*(5600/10)` rather
+than `2*5600/10`, which passes through `11200`.
 
 ### `mathGenBatch(count, length, more?)`
 

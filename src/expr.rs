@@ -13,6 +13,9 @@ use crate::rng::Rng;
 /// this, so the numbers remain readable and nothing can overflow on the way.
 /// An answer past it cannot be split at all, so the wrappers refuse one.
 pub const MAX_ABS: i64 = 10_000;
+/// The smallest max a caller may ask for in its place: numbers up to 10 are
+/// where a class starts.
+pub const MAX_MIN: i64 = 10;
 /// How far `+` and `-` reach for their second operand.
 const OFFSET_MAX: i64 = 30;
 /// Divisors `/` will introduce. Two at the least: `x / 1` teaches nothing.
@@ -332,8 +335,8 @@ fn split_value(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i
     let usable = [
         config.negatives || value >= 2,
         true,
-        value != 0 && value.abs() <= MAX_ABS,
-        value != 0 && value.abs() * DIVISOR_MIN <= MAX_ABS,
+        value != 0,
+        value != 0 && value.abs() * DIVISOR_MIN <= config.max,
     ];
     let mut candidates = [Op::Add; 4];
     let mut count = 0;
@@ -347,7 +350,7 @@ fn split_value(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
     for &op in candidates.iter() {
-        if let Some(split) = try_split(value, op, config.negatives, rng) {
+        if let Some(split) = try_split(value, op, config, rng) {
             return Some(split);
         }
     }
@@ -368,7 +371,8 @@ fn occasionally_negative(rng: &mut Rng) -> i64 {
     }
 }
 
-fn try_split(value: i64, op: Op, negatives: bool, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+    let negatives = config.negatives;
     // The sign that keeps an operand on the same side of zero as the value
     // it came from.
     let toward_value = if value < 0 { -1 } else { 1 };
@@ -422,7 +426,7 @@ fn try_split(value: i64, op: Op, negatives: bool, rng: &mut Rng) -> Option<(i64,
         if left == 0 || right == 0 {
             continue;
         }
-        if left.abs() > MAX_ABS || right.abs() > MAX_ABS {
+        if left.abs() > config.max || right.abs() > config.max {
             continue;
         }
         if !negatives && (left < 0 || right < 0) {
@@ -441,6 +445,33 @@ pub struct Config {
     /// When false, no number in the task is negative and neither is any
     /// step of working it out left to right.
     pub negatives: bool,
+    /// No number in the task, and no step of working it out, is further
+    /// from zero than this. From 10 to `MAX_ABS`.
+    pub max: i64,
+}
+
+/// A tree can grow into a corner where no leaf can be split within the
+/// bounds: with `/` alone and a max of 10, -1 can become (-8)/8, and neither
+/// 8 can be split again. One in two trees for that request ends there. Such
+/// a tree is grown again from the start, up to this many times, which leaves
+/// about one chance in 10^16 of refusing a request that can be built.
+const RESTARTS: usize = 64;
+
+/// Grows a tree towards `wanted` leaves for the answer, and says how many
+/// it reached: fewer when it got stuck.
+fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
+    let mut expr = Expr::Num(config.answer);
+    // Counted as it grows rather than walked for on every step.
+    let mut leaves = 1;
+    let mut guard = 0;
+    while leaves < wanted && guard < wanted * 64 {
+        guard += 1;
+        let mut index = rng.below(leaves as u64) as usize;
+        if let Visit::Split = expr.split_nth_leaf(&mut index, config, rng) {
+            leaves += 1;
+        }
+    }
+    (expr, leaves)
 }
 
 /// Builds the task and writes its tokens into `tokens`, which the bracket
@@ -449,15 +480,21 @@ pub struct Config {
 /// `None` when the operators cannot reach the length asked for. With the
 /// bounds above that happens in two cases only: an answer of 0 with neither
 /// `+` nor `-` (0 cannot be a product or a quotient without a zero in it),
-/// and an answer past `MAX_ABS / 2` with `/` alone.
+/// and an answer past half the max with `/` alone.
 ///
 /// Without negatives there are more: a negative answer, an answer of 0
 /// without `-`, `+` alone with an answer smaller than the number of terms
-/// (every term is at least 1), and an answer of `MAX_ABS` with neither `+`
-/// nor `*`, since `-` and `/` would both need a first number past it.
+/// (every term is at least 1), and an answer of the max itself with
+/// neither `+` nor `*`, since `-` and `/` would both need a first number
+/// past it.
 pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
     let wanted = config.length.clamp(2, 32);
     if !config.negatives && config.answer < 0 {
+        return None;
+    }
+    // Every term is at least 1, and growing towards it would only end in
+    // the corner of all ones, as many times as it was tried.
+    if !config.negatives && config.ops == Ops(Op::Add.bit()) && config.answer < wanted as i64 {
         return None;
     }
 
@@ -472,25 +509,22 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         1
     };
     let mut last = None;
-    let low = if config.negatives { -MAX_ABS } else { 0 };
+    let low = if config.negatives { -config.max } else { 0 };
 
     for _ in 0..attempts {
-        let mut expr = Expr::Num(config.answer);
-        // Counted as it grows rather than walked for on every step.
-        let mut leaves = 1;
-        let mut guard = 0;
-        while leaves < wanted && guard < wanted * 64 {
-            guard += 1;
-            let mut index = rng.below(leaves as u64) as usize;
-            if let Visit::Split = expr.split_nth_leaf(&mut index, config, rng) {
-                leaves += 1;
+        let mut restarts = 0;
+        let expr = loop {
+            match grow(config, wanted, rng) {
+                (expr, leaves) if leaves == wanted => break expr,
+                // An answer that cannot be split at all will not be the
+                // next time either.
+                (_, 1) => return None,
+                _ if restarts == RESTARTS => return None,
+                _ => restarts += 1,
             }
-        }
-        if leaves < wanted {
-            return None;
-        }
+        };
         tokens.clear();
-        expr.write(tokens, low, MAX_ABS);
+        expr.write(tokens, low, config.max);
         if !config.brackets || has_group(tokens) {
             return Some(expr);
         }
@@ -633,6 +667,7 @@ mod tests {
                 brackets,
                 ops: Ops::ALL,
                 negatives: true,
+                max: MAX_ABS,
             },
             &mut rng,
         );
@@ -741,6 +776,7 @@ mod tests {
                             brackets: seed % 2 == 0,
                             ops,
                             negatives: true,
+                            max: MAX_ABS,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -786,6 +822,7 @@ mod tests {
                             brackets: seed % 2 == 0,
                             ops,
                             negatives: false,
+                            max: MAX_ABS,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -800,6 +837,63 @@ mod tests {
                         let text = render(&tokens);
                         assert_eq!(value, answer, "{text} for {what}");
                         assert!(lowest >= 0, "{text} goes down to {lowest} for {what}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_smaller_max_builds_what_it_can_and_refuses_the_rest() {
+        // The same rules as at MAX_ABS, with max in its place, for every
+        // answer the max allows. Cornered trees are grown again, so no
+        // request is refused for some seeds and built for others.
+        for max in [10_i64, 13, 20, 100] {
+            for bits in 1..=15 {
+                let ops = Ops::from_bits(bits).unwrap();
+                let only = |op: Op| ops == Ops::from_bits(1 << op as u32).unwrap();
+                for negatives in [true, false] {
+                    for answer in -max..=max {
+                        for length in [2, 3, 5, 8, 32] {
+                            let impossible = if negatives {
+                                (answer == 0 && !ops.has(Op::Add) && !ops.has(Op::Sub))
+                                    || (only(Op::Div) && answer.abs() > max / 2)
+                            } else {
+                                answer < 0
+                                    || (answer == 0 && !ops.has(Op::Sub))
+                                    || (only(Op::Add) && answer < length as i64)
+                                    || (answer == max && !ops.has(Op::Add) && !ops.has(Op::Mul))
+                                    || (only(Op::Div) && answer > max / 2)
+                            };
+                            for seed in 0..4 {
+                                let config = Config {
+                                    answer,
+                                    length,
+                                    brackets: seed % 2 == 0,
+                                    ops,
+                                    negatives,
+                                    max,
+                                };
+                                let mut tokens = Vec::new();
+                                let built = generate(&config, &mut Rng::new(seed), &mut tokens);
+                                let what = format!(
+                                    "answer {answer}, length {length}, ops {bits:04b}, \
+                                     negatives {negatives}, max {max}, seed {seed}"
+                                );
+                                let Some(expr) = built else {
+                                    assert!(impossible, "refused {what}");
+                                    continue;
+                                };
+                                assert!(!impossible, "built {what}");
+                                assert_eq!(expr.leaf_count(), length, "{what}");
+                                let (value, lowest, highest) = Parser::parse_with_steps(&tokens);
+                                let text = render(&tokens);
+                                assert_eq!(value, answer, "{text} for {what}");
+                                let floor = if negatives { -max } else { 0 };
+                                assert!(lowest >= floor, "{text} goes down to {lowest} for {what}");
+                                assert!(highest <= max, "{text} goes up to {highest} for {what}");
+                            }
+                        }
                     }
                 }
             }
@@ -825,6 +919,7 @@ mod tests {
                             brackets: seed % 2 == 0,
                             ops: Ops::ALL,
                             negatives,
+                            max: MAX_ABS,
                         };
                         let mut tokens = Vec::new();
                         generate(&config, &mut Rng::new(seed), &mut tokens).unwrap();
@@ -851,6 +946,7 @@ mod tests {
                     brackets: false,
                     ops: Ops::ALL,
                     negatives: true,
+                    max: MAX_ABS,
                 },
                 &mut Rng::new(seed),
             )
@@ -892,6 +988,7 @@ mod tests {
                 brackets: false,
                 ops: Ops::ALL,
                 negatives: true,
+                max: MAX_ABS,
             },
             &mut rng,
         );
@@ -910,6 +1007,7 @@ mod tests {
                     brackets: true,
                     ops: Ops::ALL,
                     negatives: true,
+                    max: MAX_ABS,
                 },
                 &mut rng,
             );
@@ -977,6 +1075,7 @@ mod tests {
                             brackets: true,
                             ops: Ops::ALL,
                             negatives,
+                            max: MAX_ABS,
                         },
                         &mut Rng::new(seed),
                     );
@@ -1001,6 +1100,7 @@ mod tests {
                     brackets: false,
                     ops: Ops::ALL,
                     negatives: true,
+                    max: MAX_ABS,
                 },
                 &mut rng,
             );
@@ -1020,6 +1120,7 @@ mod tests {
             brackets: true,
             ops: Ops::ALL,
             negatives: true,
+            max: MAX_ABS,
         };
         let first = render(&build(&config, &mut Rng::new(99)).tokens());
         let second = render(&build(&config, &mut Rng::new(99)).tokens());
