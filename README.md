@@ -134,7 +134,9 @@ is checked over 200 000 generated tasks per entry point on every build.
 
 Note that brackets can appear even with `brackets: false`, wherever operator
 precedence requires them. The alternative would be a task that does not
-evaluate to its answer.
+evaluate to its answer. They are also kept where leaving them out would take
+a step of working the task out past `10000` either side: `2*(5600/10)`
+rather than `2*5600/10`, which passes through `11200`.
 
 ### `mathGenBatch(count, length, more?)`
 

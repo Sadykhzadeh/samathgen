@@ -3,7 +3,8 @@
 
 export type Operators = '+' | '-' | '*' | '/'
 
-/** A bracket, which appears wherever operator precedence requires one. */
+/** A bracket, which appears wherever operator precedence requires one, or
+ *  where a step of working the task out would otherwise pass 10000. */
 export type Bracket = '(' | ')'
 
 export interface MathGenOptions {
@@ -16,7 +17,8 @@ export interface MathGenOptions {
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
    *  numbers have no room for a group. Brackets may appear without this when
    *  precedence requires them - the alternative would be a task that does
-   *  not evaluate to its answer. */
+   *  not evaluate to its answer - or to keep every step of working the task
+   *  out within 10000 either side. */
   brackets?: boolean
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. */
