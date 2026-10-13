@@ -68,7 +68,8 @@ export function mathGenBatch (count: number, length: number, more?: MathGenOptio
 
 /**
  * Loads the WebAssembly module. In the browser, await it once before calling
- * `mathGen` or `mathGenBatch`, which throw until it has finished. Under Node
+ * `mathGen` or `mathGenBatch`, which throw until it has finished. A load
+ * that fails rejects, and calling init() again tries again. Under Node
  * the module is loaded with the package and this resolves at once, so the
  * same code runs in both.
  */

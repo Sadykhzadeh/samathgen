@@ -117,13 +117,18 @@ const readSeed = (seed) => {
 }
 
 /** Loads the wasm module. Safe to call more than once; the same promise
- *  is handed back. Pass a URL or a Response to override where it loads from. */
+ *  is handed back. Pass a URL or a Response to override where it loads from.
+ *  A load that fails, as when the .wasm could not be fetched, rejects, and
+ *  the next call tries again. */
 export const init = (input) => {
   // wasm-bindgen takes the override wrapped in an object now, and logs a
   // deprecation warning for every bare argument it is still handed.
   loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input }).then((exports) => {
     ready = true
     return exports
+  }, (error) => {
+    loading = null
+    throw error
   })
   return loading
 }

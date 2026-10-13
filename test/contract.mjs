@@ -382,13 +382,20 @@ check('a call before init() says to await it', () => {
   assert.throws(() => webMathGen(3), /await init\(\)/)
   assert.throws(() => webMathGenBatch(2, 3), /await init\(\)/)
 })
+// A page whose first fetch of the .wasm failed has to be able to try again.
+const failedLoad = await init(new Uint8Array([0, 1, 2, 3])).then(() => null, (error) => error)
 const warnings = []
 const warn = console.warn
 console.warn = (...args) => warnings.push(args.join(' '))
-await init(readFileSync(new URL('../dist/web/samathgen_bg.wasm', import.meta.url)))
+const loadError = await init(readFileSync(new URL('../dist/web/samathgen_bg.wasm', import.meta.url)))
+  .then(() => null, (error) => error)
 console.warn = warn
 check('init() takes the module bytes without complaint', () => {
   assert.deepEqual(warnings, [])
+})
+check('init() loads after a load that failed', () => {
+  assert.ok(failedLoad instanceof Error, 'bytes that are not WebAssembly were taken')
+  assert.equal(loadError, null, loadError && loadError.message)
 })
 suite(webMathGen, webMathGenBatch)
 
