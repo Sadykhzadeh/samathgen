@@ -18,7 +18,8 @@ export interface MathGenOptions {
    *  precedence requires them - the alternative would be a task that does
    *  not evaluate to its answer. */
   brackets?: boolean
-  /** Fill `quizOptions` with the answer and three near misses. */
+  /** Fill `quizOptions` with the answer and three near misses, each within
+   *  5 of it. */
   quizMode?: boolean
   /** The operators the task may use, e.g. `['+', '-']`. Default: all four.
    *  Throws a RangeError for an unknown or empty list, and for the two
@@ -41,7 +42,9 @@ export interface MathGenResult {
    *  that evaluates to `answer`. */
   task: Array<number | Operators | Bracket>
   answer: number
-  /** Four options including the answer, shuffled. Empty unless `quizMode`. */
+  /** Four options including the answer, shuffled. The answer is as likely
+   *  to be the smallest of them as the largest or either between. Empty
+   *  unless `quizMode`. */
   quizOptions: number[]
 }
 
