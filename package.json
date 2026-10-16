@@ -7,10 +7,18 @@
   "types": "js/index.d.ts",
   "exports": {
     ".": {
-      "types": "./js/index.d.ts",
-      "browser": "./js/web.js",
-      "node": "./js/node.cjs",
-      "default": "./js/node.cjs"
+      "browser": {
+        "types": "./js/index.d.ts",
+        "default": "./js/web.js"
+      },
+      "node": {
+        "types": "./js/node.d.cts",
+        "default": "./js/node.cjs"
+      },
+      "default": {
+        "types": "./js/node.d.cts",
+        "default": "./js/node.cjs"
+      }
     }
   },
   "files": [
