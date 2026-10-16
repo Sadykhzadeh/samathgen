@@ -90,7 +90,7 @@ is not a number at all is a `TypeError`.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `answer` | a random integer in `10..=20`, or from half of `max` up to `max` when that is below `20` | The value the task must evaluate to, a whole number from `-max` to `max`. `0` is honoured. |
-| `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. |
+| `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. Set to `'never'` for a task that groups nothing, for a class that has not met brackets yet. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses, each within `5` of it. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
@@ -112,21 +112,31 @@ than return a shorter task:
   numerator would pass `max`;
 - with `negatives: false`, a negative `answer`, `+` alone with an `answer`
   smaller than `length` (every term is at least 1), and an `answer` of
-  `max` itself with neither `+` nor `*`.
+  `max` itself with neither `+` nor `*`;
+- with `brackets: 'never'`, a long task of `/` alone, or of `-` alone
+  without negatives. Each is one chain worked out left to right, whose
+  first number is the answer times, or plus, every number after it, so
+  past a few numbers it passes `max`. `-` with `/`, and `+` with `/`
+  without negatives, can run short of room as well: past about 24
+  numbers, or sooner under a small `max` or for a small `answer`. Any set
+  with `*` in it, or with both `+` and `-`, builds every task without
+  brackets that it builds with them.
 
 With `*` alone a prime answer can only become `1 * p`, so expect plenty of
 ones. By default about one task in three of length 3 contains a negative
 number, and one in two of length 5.
 
 ```js
-// adding and taking away within twenty, nothing below zero
-mathGen(3, { operators: ['+', '-'], negatives: false, max: 20 })
+// adding and taking away within twenty, nothing below zero, no brackets
+mathGen(3, { operators: ['+', '-'], negatives: false, max: 20, brackets: 'never' })
 ```
 
 Without a `max`, numbers run well past the answer: with answers from 10 to
 20, a number past 100 turns up in 10% of tasks of two numbers and 34% of
 tasks of eight, and adding and taking away without negatives passes 20 in
-57% of tasks of three. With `max: 20` none of them does.
+57% of tasks of three. With `max: 20` none of them does. Without
+`brackets: 'never'`, 30% of those tasks of three and 56% of those of four
+come as `12-(5+3)` or `20-(9-4)`.
 
 Returns:
 
@@ -143,7 +153,11 @@ Note that brackets can appear even with `brackets: false`, wherever operator
 precedence requires them. The alternative would be a task that does not
 evaluate to its answer. They are also kept where leaving them out would take
 a step of working the task out past `max` either side: `2*(5600/10)` rather
-than `2*5600/10`, which passes through `11200`.
+than `2*5600/10`, which passes through `11200`. With `brackets: 'never'` the
+task is built so that neither ever happens: every chain of operators grows
+the way it is read, from left to right, and every step of working it out is
+within `max`. A negative number still comes in its own brackets, as in
+`7-(-5)`, unless `negatives` is `false`.
 
 ### `mathGenBatch(count, length, more?)`
 

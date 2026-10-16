@@ -69,6 +69,19 @@ impl Op {
     fn right_operand_needs_brackets_at_equal_precedence(self) -> bool {
         matches!(self, Op::Sub | Op::Div)
     }
+
+    /// The operators its left and its right operand may be split by without
+    /// precedence calling for brackets around either: `a*b-c` and `a-b*c`,
+    /// but not `(a-b)*c` or `a-(b-c)`.
+    fn flat_operands(self) -> (Ops, Ops) {
+        let tighter = Ops(Op::Mul.bit() | Op::Div.bit());
+        match self {
+            Op::Add => (Ops::ALL, Ops::ALL),
+            Op::Sub => (Ops::ALL, tighter),
+            Op::Mul => (tighter, tighter),
+            Op::Div => (tighter, Ops(0)),
+        }
+    }
 }
 
 /// The operators a task may use, one bit per `Op`.
@@ -89,6 +102,10 @@ impl Ops {
 
     pub fn has(self, op: Op) -> bool {
         self.0 & op.bit() != 0
+    }
+
+    fn and(self, other: Ops) -> Ops {
+        Ops(self.0 & other.0)
     }
 
     /// With only `+`, or only `*`, no grouping ever changes the value, so no
@@ -149,7 +166,15 @@ impl Expr {
         }
     }
 
-    fn split_nth_leaf(&mut self, index: &mut usize, config: &Config, rng: &mut Rng) -> Visit {
+    /// `room` is the operators this subtree may be split by where it stands,
+    /// which is all of them unless the task is to have no brackets.
+    fn split_nth_leaf(
+        &mut self,
+        index: &mut usize,
+        room: Ops,
+        config: &Config,
+        rng: &mut Rng,
+    ) -> Visit {
         match self {
             Expr::Num(value) => {
                 let current = *value;
@@ -157,7 +182,7 @@ impl Expr {
                     *index -= 1;
                     return Visit::Missed;
                 }
-                match split_value(current, config, rng) {
+                match split_value(current, config.ops.and(room), config, rng) {
                     Some((left, op, right)) => {
                         *self = Expr::Binary {
                             op,
@@ -169,11 +194,58 @@ impl Expr {
                     None => Visit::Failed,
                 }
             }
-            Expr::Binary { left, right, .. } => match left.split_nth_leaf(index, config, rng) {
-                Visit::Missed => right.split_nth_leaf(index, config, rng),
-                reached => reached,
-            },
+            Expr::Binary { op, left, right } => {
+                let (left_room, right_room) = if config.flat {
+                    let (left, right) = op.flat_operands();
+                    (room.and(left), room.and(right))
+                } else {
+                    (room, room)
+                };
+                let right_was_leaf = matches!(**right, Expr::Num(_));
+                match left.split_nth_leaf(index, left_room, config, rng) {
+                    Visit::Missed => match right.split_nth_leaf(index, right_room, config, rng) {
+                        Visit::Split if config.flat && right_was_leaf => self.lean_left(config),
+                        reached => reached,
+                    },
+                    reached => reached,
+                }
+            }
         }
+    }
+
+    /// In a task without brackets, `l+(a-b)` just split from `l+x` is
+    /// regrown as `(l+a)-b`, and `l*(a/b)` as `(l*a)/b`. Both read the same,
+    /// and `l+a`, a step a pupil takes on the way, becomes a node of the
+    /// tree, which has to be within bounds: where it is not, the split is
+    /// undone. Left as it was, only brackets could keep that step in bounds.
+    fn lean_left(&mut self, config: &Config) -> Visit {
+        let Expr::Binary { op, left, right } = self else {
+            return Visit::Split;
+        };
+        let Expr::Binary {
+            op: inner,
+            left: first,
+            right: second,
+        } = &mut **right
+        else {
+            return Visit::Split;
+        };
+        if inner.precedence() != op.precedence() {
+            return Visit::Split;
+        }
+        let step = op.apply(left.value(), first.value());
+        let low = if config.negatives { -config.max } else { 0 };
+        if step < low || step > config.max {
+            let value = inner.apply(first.value(), second.value());
+            **right = Expr::Num(value);
+            return Visit::Failed;
+        }
+        // In place: the node that held `a-b` takes `l+a`, and `b` moves up.
+        std::mem::swap(op, inner);
+        std::mem::swap(first, second);
+        std::mem::swap(left, first);
+        std::mem::swap(left, right);
+        Visit::Split
     }
 
     #[cfg(test)]
@@ -324,10 +396,9 @@ fn useful_divisors(value: i64, out: &mut [i64; MAX_DIVISORS]) -> usize {
     count
 }
 
-/// Picks `(a, op, b)` such that `a op b == value` exactly, or `None` when
-/// this value cannot be split within the bounds above.
-fn split_value(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
-    let ops = config.ops;
+/// Picks `(a, op, b)` such that `a op b == value` exactly, with `op` one of
+/// `ops`, or `None` when this value cannot be split within the bounds above.
+fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
     // 0 * anything and 0 / anything are degenerate: the other operand carries
     // no constraint, which is how the old generator ended up emitting
     // "1*3*2*0+0*0*0*0..." for a large length. Without negatives, 0 and 1
@@ -349,6 +420,18 @@ fn split_value(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i
 
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
+    // Without brackets a prime is often left to `*` and `/` alone, and `*`
+    // can only make it `1*p`. A task full of `*1` teaches nothing, so that
+    // is the last resort there.
+    if config.flat && candidates.len() > 1 {
+        let mut divisors = [0; MAX_DIVISORS];
+        useful_divisors(value, &mut divisors);
+        if divisors[0] == 1 {
+            if let Some(at) = candidates.iter().position(|&op| op == Op::Mul) {
+                candidates[at..].rotate_left(1);
+            }
+        }
+    }
     for &op in candidates.iter() {
         if let Some(split) = try_split(value, op, config, rng) {
             return Some(split);
@@ -448,6 +531,9 @@ pub struct Config {
     /// No number in the task, and no step of working it out, is further
     /// from zero than this. From 10 to `MAX_ABS`.
     pub max: i64,
+    /// When true, nothing in the task is grouped in brackets, and `brackets`
+    /// is not asked. A negative number still carries its own.
+    pub flat: bool,
 }
 
 /// A tree can grow into a corner where no leaf can be split within the
@@ -467,7 +553,7 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     while leaves < wanted && guard < wanted * 64 {
         guard += 1;
         let mut index = rng.below(leaves as u64) as usize;
-        if let Visit::Split = expr.split_nth_leaf(&mut index, config, rng) {
+        if let Visit::Split = expr.split_nth_leaf(&mut index, Ops::ALL, config, rng) {
             leaves += 1;
         }
     }
@@ -487,6 +573,11 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
 /// (every term is at least 1), and an answer of the max itself with
 /// neither `+` nor `*`, since `-` and `/` would both need a first number
 /// past it.
+///
+/// Without brackets, a task of `/` alone, or of `-` alone without
+/// negatives, is one chain whose first number grows with every term, and
+/// past a few terms it cannot be built. `-` with `/`, and `+` with `/`
+/// without negatives, run short of room too, sooner under a small max.
 pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
     let wanted = config.length.clamp(2, 32);
     if !config.negatives && config.answer < 0 {
@@ -498,16 +589,33 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         return None;
     }
 
+    // Without brackets `/` alone is one chain, whose first number is the
+    // answer times every divisor after it, each at least 2, and `-` alone
+    // without negatives one whose first number is the answer plus every
+    // number after it, each at least 1. Past the max, growing one is in vain.
+    let rest = wanted as i64 - 1;
+    if config.flat && config.ops == Ops(Op::Div.bit()) && config.answer.abs() << rest > config.max {
+        return None;
+    }
+    if config.flat
+        && !config.negatives
+        && config.ops == Ops(Op::Sub.bit())
+        && config.answer + rest > config.max
+    {
+        return None;
+    }
+
     // `brackets` asks for a shape, not a different answer, so the whole task
     // is simply drawn again until the shape appears. If it does not after a
     // few tries the last one is returned: a task that evaluates correctly
     // without brackets beats no task at all. A group needs a sum or product
     // inside another one, so two numbers can never have one.
-    let attempts = if config.brackets && config.ops.can_need_brackets() && wanted >= 3 {
-        24
-    } else {
-        1
-    };
+    let attempts =
+        if config.brackets && !config.flat && config.ops.can_need_brackets() && wanted >= 3 {
+            24
+        } else {
+            1
+        };
     let mut last = None;
     let low = if config.negatives { -config.max } else { 0 };
 
@@ -525,6 +633,7 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
         };
         tokens.clear();
         expr.write(tokens, low, config.max);
+        debug_assert!(!config.flat || !has_group(tokens), "a group in a flat task");
         if !config.brackets || has_group(tokens) {
             return Some(expr);
         }
@@ -668,6 +777,7 @@ mod tests {
                 ops: Ops::ALL,
                 negatives: true,
                 max: MAX_ABS,
+                flat: false,
             },
             &mut rng,
         );
@@ -777,6 +887,7 @@ mod tests {
                             ops,
                             negatives: true,
                             max: MAX_ABS,
+                            flat: false,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -823,6 +934,7 @@ mod tests {
                             ops,
                             negatives: false,
                             max: MAX_ABS,
+                            flat: false,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -873,6 +985,7 @@ mod tests {
                                     ops,
                                     negatives,
                                     max,
+                                    flat: false,
                                 };
                                 let mut tokens = Vec::new();
                                 let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -901,6 +1014,102 @@ mod tests {
     }
 
     #[test]
+    fn a_flat_task_groups_nothing_and_is_built_wherever_it_can_be() {
+        // Without brackets `/` alone, and `-` alone without negatives, is one
+        // chain from left to right whose first number is the answer times or
+        // plus every number after it, so a long one passes max and is always
+        // refused. These, `-` with `/`, and `+` with `/` without negatives,
+        // can run short of room before that. Every other set builds what it
+        // builds with brackets, at every length and for every seed.
+        for max in [10_i64, 20, 100, MAX_ABS] {
+            for bits in 1..=15 {
+                let ops = Ops::from_bits(bits).unwrap();
+                let only = |op: Op| ops == Ops::from_bits(1 << op as u32).unwrap();
+                let pair = |a: Op, b: Op| ops == Ops(a.bit() | b.bit());
+                for negatives in [true, false] {
+                    let short = only(Op::Div)
+                        || pair(Op::Sub, Op::Div)
+                        || (!negatives && (only(Op::Sub) || pair(Op::Add, Op::Div)));
+                    for answer in [
+                        -max,
+                        -max / 2 - 1,
+                        -7,
+                        -1,
+                        0,
+                        1,
+                        2,
+                        7,
+                        12,
+                        max / 2,
+                        max / 2 + 1,
+                        max - 1,
+                        max,
+                    ]
+                    .into_iter()
+                    .filter(|answer: &i64| answer.abs() <= max)
+                    {
+                        for length in [2, 3, 5, 8, 16, 32] {
+                            let impossible = if negatives {
+                                (answer == 0 && !ops.has(Op::Add) && !ops.has(Op::Sub))
+                                    || (only(Op::Div) && answer.abs() > max / 2)
+                            } else {
+                                answer < 0
+                                    || (answer == 0 && !ops.has(Op::Sub))
+                                    || (only(Op::Add) && answer < length as i64)
+                                    || (answer == max && !ops.has(Op::Add) && !ops.has(Op::Mul))
+                                    || (only(Op::Div) && answer > max / 2)
+                            };
+                            // The first number of the one chain is past max.
+                            let rest = length as i64 - 1;
+                            let impossible = impossible
+                                || (only(Op::Div) && answer.abs() << rest > max)
+                                || (!negatives && only(Op::Sub) && answer + rest > max);
+                            for seed in 0..4 {
+                                let config = Config {
+                                    answer,
+                                    length,
+                                    brackets: false,
+                                    ops,
+                                    negatives,
+                                    max,
+                                    flat: true,
+                                };
+                                let mut tokens = Vec::new();
+                                let built = generate(&config, &mut Rng::new(seed), &mut tokens);
+                                let what = format!(
+                                    "answer {answer}, length {length}, ops {bits:04b}, \
+                                     negatives {negatives}, max {max}, seed {seed}"
+                                );
+                                let Some(expr) = built else {
+                                    assert!(impossible || short, "refused {what}");
+                                    continue;
+                                };
+                                assert!(!impossible, "built {what}");
+                                let text = render(&tokens);
+                                assert!(!has_group(&tokens), "{text} for {what}");
+                                if !negatives {
+                                    assert!(!tokens.contains(&Token::Open), "{text} for {what}");
+                                }
+                                assert_eq!(expr.leaf_count(), length, "{what}");
+                                let (value, lowest, highest) = Parser::parse_with_steps(&tokens);
+                                assert_eq!(value, answer, "{text} for {what}");
+                                let floor = if negatives { -max } else { 0 };
+                                assert!(lowest >= floor, "{text} goes down to {lowest} for {what}");
+                                assert!(highest <= max, "{text} goes up to {highest} for {what}");
+                                for token in &tokens {
+                                    if let Token::Op(op) = token {
+                                        assert!(ops.has(*op), "{op:?} in {text} for {what}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn no_step_of_working_a_task_out_passes_the_bounds() {
         // a*(b/c) written flat as a*b/c passes through a*b, which for
         // 2*(5600/10) is 11200.
@@ -920,6 +1129,7 @@ mod tests {
                             ops: Ops::ALL,
                             negatives,
                             max: MAX_ABS,
+                            flat: false,
                         };
                         let mut tokens = Vec::new();
                         generate(&config, &mut Rng::new(seed), &mut tokens).unwrap();
@@ -947,6 +1157,7 @@ mod tests {
                     ops: Ops::ALL,
                     negatives: true,
                     max: MAX_ABS,
+                    flat: false,
                 },
                 &mut Rng::new(seed),
             )
@@ -989,6 +1200,7 @@ mod tests {
                 ops: Ops::ALL,
                 negatives: true,
                 max: MAX_ABS,
+                flat: false,
             },
             &mut rng,
         );
@@ -1008,6 +1220,7 @@ mod tests {
                     ops: Ops::ALL,
                     negatives: true,
                     max: MAX_ABS,
+                    flat: false,
                 },
                 &mut rng,
             );
@@ -1076,6 +1289,7 @@ mod tests {
                             ops: Ops::ALL,
                             negatives,
                             max: MAX_ABS,
+                            flat: false,
                         },
                         &mut Rng::new(seed),
                     );
@@ -1101,6 +1315,7 @@ mod tests {
                     ops: Ops::ALL,
                     negatives: true,
                     max: MAX_ABS,
+                    flat: false,
                 },
                 &mut rng,
             );
@@ -1121,6 +1336,7 @@ mod tests {
             ops: Ops::ALL,
             negatives: true,
             max: MAX_ABS,
+            flat: false,
         };
         let first = render(&build(&config, &mut Rng::new(99)).tokens());
         let second = render(&build(&config, &mut Rng::new(99)).tokens());
