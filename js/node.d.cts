@@ -29,8 +29,10 @@ export interface MathGenOptions {
    *  `-`, and an answer past half of max either side with `/` alone. */
   operators?: Operators[]
   /** Set to false to keep every number, every quiz option and every step of
-   *  working the task out left to right at 0 or above. A negative answer
-   *  then throws a RangeError. Default: true. */
+   *  working the task out left to right at 0 or above. A RangeError is then
+   *  thrown for a negative answer, an answer of 0 without `-`, `+` alone
+   *  with an answer smaller than the length, and an answer of max itself
+   *  with neither `+` nor `*`. Default: true. */
   negatives?: boolean
   /** How far from zero any number may be: every number in the task, every
    *  step of working it out left to right and every quiz option. A whole
