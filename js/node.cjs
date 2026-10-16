@@ -79,11 +79,12 @@ const readMax = (max) => {
 // half the max up to the max. src/lib.rs draws it.
 const defaultAnswers = (max) => max >= 20 ? 'an answer from 10 to 20' : `an answer from ${Math.floor((max + 1) / 2)} to ${max}`
 
-// One bit per operator, in the order src/expr.rs numbers them, and one more
-// for ruling out negative numbers.
+// One bit per operator, in the order src/expr.rs numbers them, one more
+// for ruling out negative numbers and one for ruling out brackets.
 const OPERATORS = '+-*/'
 const ALL_OPERATORS = 0b1111
 const NO_NEGATIVES = 1 << 4
+const FLAT = 1 << 5
 
 const readOperators = (operators) => {
   if (operators === undefined || operators === null) return ALL_OPERATORS
@@ -101,25 +102,32 @@ const readOperators = (operators) => {
 }
 
 // What may appear in the task, as the one integer the WebAssembly takes.
-// Only an explicit `negatives: false` rules them out, like the other flags.
+// Only an explicit `negatives: false` rules them out, like the other flags,
+// and only `brackets: 'never'` rules out a group.
 const readAllowed = (options, answer) => {
-  const operators = readOperators(options.operators)
-  if (options.negatives !== false) return operators
+  const allowed = readOperators(options.operators) | (options.brackets === 'never' ? FLAT : 0)
+  if (options.negatives !== false) return allowed
   if (answer < 0) {
     throw new RangeError(`answer ${answer} is negative, but negatives is false`)
   }
-  return operators | NO_NEGATIVES
+  return allowed | NO_NEGATIVES
 }
 
 // A few combinations of answer, length and rules cannot be built at all;
 // the README lists them, and src/expr.rs says why.
-const cannotBuild = (length, answer, max, options) => new RangeError(
-  `no task of ${clampLength(length)} terms evaluating to ` +
-  `${answer === undefined ? defaultAnswers(max) : answer} can be built from ` +
-  `${(options.operators || OPERATORS.split('')).join(' ')}` +
-  `${options.negatives === false ? ' without negative numbers' : ''}` +
-  `${max < ANSWER_LIMIT ? ` within ${max}` : ''}`
-)
+const cannotBuild = (length, answer, max, options) => {
+  const without = [
+    options.negatives === false && 'negative numbers',
+    options.brackets === 'never' && 'brackets',
+  ].filter(Boolean)
+  return new RangeError(
+    `no task of ${clampLength(length)} terms evaluating to ` +
+    `${answer === undefined ? defaultAnswers(max) : answer} can be built from ` +
+    `${(options.operators || OPERATORS.split('')).join(' ')}` +
+    `${without.length > 0 ? ` without ${without.join(' or ')}` : ''}` +
+    `${max < ANSWER_LIMIT ? ` within ${max}` : ''}`
+  )
+}
 
 // Task i of a batch is the task for seed + i, which only holds for whole
 // numbers that JavaScript can count up from exactly.

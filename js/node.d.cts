@@ -18,8 +18,14 @@ export interface MathGenOptions {
    *  numbers have no room for a group. Brackets may appear without this when
    *  precedence requires them - the alternative would be a task that does
    *  not evaluate to its answer - or to keep every step of working the task
-   *  out within max. */
-  brackets?: boolean
+   *  out within max.
+   *
+   *  `'never'` builds a task that groups nothing, as `12-5-3` rather than
+   *  `12-(5+3)`; a negative number still carries its own brackets. A long
+   *  task of `/` alone, or of `-` alone without negatives, then throws a
+   *  RangeError, and so can one of `-` with `/`, or of `+` with `/` without
+   *  negatives. */
+  brackets?: boolean | 'never'
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. */
   quizMode?: boolean

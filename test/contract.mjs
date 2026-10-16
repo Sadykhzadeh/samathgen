@@ -203,6 +203,37 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check("brackets: 'never' groups nothing, whatever the operators", () => {
+    const group = (task) => task.some((token, i) =>
+      token === '(' && !(typeof task[i + 1] === 'number' && task[i + 1] < 0))
+    const symbols = ['+', '-', '*', '/']
+    for (let bits = 1; bits < 16; bits++) {
+      // Every set with * in it, or both + and -, has room for any length.
+      if (!(bits & 4) && (bits & 3) !== 3) continue
+      const operators = symbols.filter((_, i) => bits & (1 << i))
+      for (const negatives of [true, false]) {
+        for (let seed = 0; seed < 100; seed++) {
+          const length = 2 + (seed % 9)
+          const more = { operators, negatives, seed, brackets: 'never', max: seed % 2 === 0 ? 20 : 10000 }
+          const result = mathGen(length, more)
+          const text = result.task.join('')
+          assert.ok(!group(result.task), `${text} from ${operators.join('')}`)
+          if (!negatives) assert.ok(!result.task.includes('('), text)
+          assert.equal(result.task.filter((t) => typeof t === 'number').length, length, text)
+          // eslint-disable-next-line no-eval
+          assert.equal(eval(text), result.answer, text)
+        }
+      }
+    }
+    // `/` alone is one chain, whose first number is the answer times every
+    // divisor after it.
+    assert.throws(() => mathGen(16, { operators: ['/'], brackets: 'never', seed: 1 }), /16 terms .* from \/ without brackets$/)
+    assert.throws(
+      () => mathGen(12, { operators: ['-'], negatives: false, max: 20, brackets: 'never' }),
+      /from - without negative numbers or brackets within 20$/
+    )
+  })
+
   check('the task is made only of numbers, operators and brackets', () => {
     const allowed = new Set(['+', '-', '*', '/', '(', ')'])
     for (let seed = 0; seed < 2000; seed++) {
@@ -483,6 +514,7 @@ check('the same seed gives the same task from either entry point', () => {
   for (let seed = 0; seed < 2000; seed++) {
     const more = { seed, quizMode: seed % 2 === 0, brackets: seed % 3 === 0 }
     if (seed % 5 === 0) more.answer = (seed % 41) - 20
+    if (seed % 7 === 0) more.brackets = 'never'
     const length = 2 + (seed % 9)
     assert.deepEqual(webMathGen(length, more), nodeMathGen(length, more), `seed ${seed}`)
   }

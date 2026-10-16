@@ -29,6 +29,8 @@ pub const SYMBOL_BASE: i32 = 1 << 24;
 
 /// In `allowed`, next to one bit per operator: no negative numbers.
 const NO_NEGATIVES: u32 = 1 << 4;
+/// And no brackets that group anything.
+const FLAT: u32 = 1 << 5;
 
 fn code(token: Token) -> i32 {
     match token {
@@ -44,8 +46,8 @@ fn code(token: Token) -> i32 {
 ///
 /// `seed` makes a run reproducible. The JavaScript wrapper draws one when the
 /// caller does not supply it. `allowed` has bit `1 << n` set for each of
-/// `+ - * /` the task may use, in that order, and `NO_NEGATIVES` to keep
-/// every number in it at 0 or above. `max` keeps every number in it, every
+/// `+ - * /` the task may use, in that order, `NO_NEGATIVES` to keep
+/// every number in it at 0 or above and `FLAT` to group nothing in brackets. `max` keeps every number in it, every
 /// step of working it out and every option within that far of zero.
 ///
 /// An empty array means those rules cannot build a task of that length for
@@ -69,9 +71,10 @@ pub fn generate(
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(allowed & !NO_NEGATIVES).unwrap_or(Ops::ALL),
+        ops: Ops::from_bits(allowed & !(NO_NEGATIVES | FLAT)).unwrap_or(Ops::ALL),
         negatives: allowed & NO_NEGATIVES == 0,
         max: max as i64,
+        flat: allowed & FLAT != 0,
     };
     write_task(
         &mut out,
@@ -107,9 +110,10 @@ pub fn generate_batch(
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(allowed & !NO_NEGATIVES).unwrap_or(Ops::ALL),
+        ops: Ops::from_bits(allowed & !(NO_NEGATIVES | FLAT)).unwrap_or(Ops::ALL),
         negatives: allowed & NO_NEGATIVES == 0,
         max: max as i64,
+        flat: allowed & FLAT != 0,
     };
     let seed = seed.abs() as u64;
     for i in 0..count {
@@ -129,6 +133,7 @@ struct Request {
     ops: Ops,
     negatives: bool,
     max: i64,
+    flat: bool,
 }
 
 /// Appends one task to `out`, or returns false and appends nothing when the
@@ -143,6 +148,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         ops,
         negatives,
         max,
+        flat,
     } = *request;
     assert!(
         (expr::MAX_MIN..=expr::MAX_ABS).contains(&max),
@@ -170,6 +176,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
             ops,
             negatives,
             max,
+            flat,
         },
         &mut rng,
         tokens,
