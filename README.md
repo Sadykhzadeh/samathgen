@@ -89,7 +89,7 @@ is not a number at all is a `TypeError`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `answer` | a random integer in `10..=20`, or from half of `max` up to `max` when that is below `20`, among those the other options can build | The value the task must evaluate to, a whole number from `-max` to `max`. `0` is honoured. |
+| `answer` | a random integer in `10..=20`, or from half of `max` up to `max` when that is below `20`, among those the other options can build | The value the task must evaluate to, a whole number from `-max` to `max`. `0` is honoured. A range `[low, high]` draws it from there instead, the ends included, uniformly among the answers the other options can build, and in a batch every task draws its own: `answer: [50, 100]` is a worksheet within a hundred. |
 | `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. Set to `'never'` for a task that groups nothing, for a class that has not met brackets yet; any other string is a `RangeError`. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses, each within `5` of it. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
@@ -140,6 +140,9 @@ number, and one in two of length 5.
 ```js
 // adding and taking away within twenty, nothing below zero, no brackets
 mathGen(3, { operators: ['+', '-'], negatives: false, max: 20, brackets: 'never' })
+
+// a worksheet of twenty within a hundred, answers from 50 to 100
+mathGenBatch(20, 3, { answer: [50, 100], max: 100, negatives: false })
 ```
 
 Without a `max`, numbers run well past the answer: with answers from 10 to

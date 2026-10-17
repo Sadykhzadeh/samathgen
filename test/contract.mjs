@@ -121,6 +121,50 @@ const suite = (mathGen, mathGenBatch) => {
     assert.ok(mathGen(4, { answer: null, seed: 1 }).answer >= 10)
   })
 
+  check('answer can be a range, and every answer in it is drawn', () => {
+    const batch = mathGenBatch(2000, 3, { answer: [50, 100], max: 100, seed: 1, negatives: false })
+    const seen = new Set()
+    for (const { task, answer } of batch) {
+      assert.ok(answer >= 50 && answer <= 100, `answer ${answer} outside 50..100`)
+      // eslint-disable-next-line no-eval
+      assert.equal(eval(task.join('')), answer, task.join(''))
+      seen.add(answer)
+    }
+    assert.equal(seen.size, 51, 'not every answer from 50 to 100 was drawn')
+    // The ends count, however wide the range.
+    const wide = mathGenBatch(3000, 2, { answer: [-10000, 10000], seed: 2 }).map((task) => task.answer)
+    assert.ok(wide.every((answer) => answer >= -10000 && answer <= 10000))
+    assert.ok(wide.some((answer) => answer < -9000) && wide.some((answer) => answer > 9000))
+    assert.ok(wide.some((answer) => answer < 0) && wide.some((answer) => answer > 0))
+  })
+
+  check('a range of one answer is that answer, and task i of a ranged batch is the task for seed + i', () => {
+    for (let seed = 0; seed < 100; seed++) {
+      assert.deepEqual(mathGen(4, { answer: [7, 7], seed }), mathGen(4, { answer: 7, seed }))
+    }
+    const more = { answer: [20, 40], quizMode: true, brackets: true }
+    const batch = mathGenBatch(30, 5, { ...more, seed: 99 })
+    batch.forEach((task, i) => assert.deepEqual(task, mathGen(5, { ...more, seed: 99 + i }), `task ${i}`))
+  })
+
+  check('an answer range that cannot be honoured is refused with the reason', () => {
+    assert.throws(() => mathGen(4, { answer: [5, 1] }), /answer range must go from low to high, got \[5, 1\]/)
+    assert.throws(() => mathGen(4, { answer: [5] }), RangeError)
+    assert.throws(() => mathGen(4, { answer: [1, 2, 3] }), /range \[low, high\], got an array of 3/)
+    assert.throws(() => mathGen(4, { answer: [5, null] }), TypeError)
+    assert.throws(() => mathGen(4, { answer: ['1', 5] }), TypeError)
+    assert.throws(() => mathGen(4, { answer: [1, 20000] }), RangeError)
+    assert.throws(() => mathGen(4, { answer: [1, 50], max: 20 }), RangeError)
+    assert.throws(() => mathGen(4, { answer: [-5, 20], negatives: false }), /answer -5 is negative, but negatives is false/)
+    // 14 terms of + without negatives make 14 at the least.
+    const sums = { operators: ['+'], negatives: false }
+    assert.throws(() => mathGen(14, { ...sums, answer: [1, 13] }), /evaluating to an answer from 1 to 13 can be built/)
+    assert.throws(() => mathGenBatch(2, 14, { ...sums, answer: [0, 13] }), RangeError)
+    assert.ok(mathGen(14, { ...sums, answer: [1, 20], seed: 1 }).answer >= 14)
+    // Of a wide range, 64 answers are tried before it is given up.
+    assert.throws(() => mathGen(32, { ...sums, answer: [0, 30] }), /an answer from 0 to 30 can be built/)
+  })
+
   check('a seed that is not a number is refused rather than ignored', () => {
     for (const seed of ['42', NaN, Infinity, {}]) {
       assert.throws(() => mathGen(4, { seed }), TypeError, `seed ${String(seed)}`)

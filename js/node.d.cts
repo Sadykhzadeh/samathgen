@@ -9,11 +9,15 @@ export type Bracket = '(' | ')'
 
 export interface MathGenOptions {
   /** The value the task must evaluate to: a whole number from -max to max,
-   *  0 included. Anything else throws a RangeError (or a TypeError for a
-   *  value that is not a number). Default: a random integer in 10..=20, or
-   *  from half of max up to max when max is below 20, among those the other
-   *  options can build; only when none of them can is a RangeError thrown. */
-  answer?: number
+   *  0 included. Or a range `[low, high]` to draw it from, the ends included
+   *  and every answer the other options can build as likely as another; in
+   *  a batch each task draws its own. Anything else throws a RangeError (or a
+   *  TypeError for a value that is not a number), as does a range of which
+   *  no answer can be built; of one wider than 64 answers, 64 are tried.
+   *  Default: a random integer in 10..=20, or from half of max up to max
+   *  when max is below 20, among those the other options can build; only
+   *  when none of them can is a RangeError thrown. */
+  answer?: number | readonly [number, number]
   /** Ask for a task that groups part of itself in brackets, as in
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
    *  numbers have no room for a group. With `+` alone or `*` alone, where

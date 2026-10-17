@@ -21,6 +21,10 @@ use std::cell::RefCell;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
 
+/// How many answers of a range are tried before the request is refused: all
+/// of a range this small, this many drawn from a bigger one.
+const ANSWER_TRIES: usize = 64;
+
 /// Default answer range. Under a max below 20 it is half the max up to the
 /// max instead.
 const DEFAULT_ANSWER_LOW: i64 = 10;
@@ -100,7 +104,8 @@ pub fn wasm_memory() -> JsValue {
 #[allow(clippy::too_many_arguments)]
 pub fn generate(
     length: u32,
-    answer: f64,
+    answer_low: f64,
+    answer_high: f64,
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
@@ -110,7 +115,16 @@ pub fn generate(
 ) -> *const i32 {
     publish(|out| {
         fill_task(
-            out, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+            out,
+            length,
+            answer_low,
+            answer_high,
+            use_answer,
+            brackets,
+            quiz_mode,
+            allowed,
+            max,
+            seed,
         )
     })
 }
@@ -120,7 +134,8 @@ pub fn generate(
 fn fill_task(
     out: &mut Vec<i32>,
     length: u32,
-    answer: f64,
+    answer_low: f64,
+    answer_high: f64,
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
@@ -128,17 +143,15 @@ fn fill_task(
     max: u32,
     seed: f64,
 ) -> bool {
-    let request = Request {
+    let request = Request::new(
         length,
-        answer,
+        (answer_low, answer_high),
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(allowed & !(NO_NEGATIVES | FLAT)).unwrap_or(Ops::ALL),
-        negatives: allowed & NO_NEGATIVES == 0,
-        max: max as i64,
-        flat: allowed & FLAT != 0,
-    };
+        allowed,
+        max,
+    );
     write_task(
         out,
         &mut Vec::with_capacity(96),
@@ -160,7 +173,8 @@ fn fill_task(
 pub fn generate_batch(
     count: u32,
     length: u32,
-    answer: f64,
+    answer_low: f64,
+    answer_high: f64,
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
@@ -171,7 +185,17 @@ pub fn generate_batch(
 ) -> *const i32 {
     publish(|out| {
         fill_batch(
-            out, count, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+            out,
+            count,
+            length,
+            answer_low,
+            answer_high,
+            use_answer,
+            brackets,
+            quiz_mode,
+            allowed,
+            max,
+            seed,
             distinct,
         )
     })
@@ -183,7 +207,8 @@ fn fill_batch(
     out: &mut Vec<i32>,
     count: u32,
     length: u32,
-    answer: f64,
+    answer_low: f64,
+    answer_high: f64,
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
@@ -194,17 +219,15 @@ fn fill_batch(
 ) -> bool {
     out.reserve(count as usize * 24);
     let mut tokens = Vec::with_capacity(96);
-    let request = Request {
+    let request = Request::new(
         length,
-        answer,
+        (answer_low, answer_high),
         use_answer,
         brackets,
         quiz_mode,
-        ops: Ops::from_bits(allowed & !(NO_NEGATIVES | FLAT)).unwrap_or(Ops::ALL),
-        negatives: allowed & NO_NEGATIVES == 0,
-        max: max as i64,
-        flat: allowed & FLAT != 0,
-    };
+        allowed,
+        max,
+    );
     let seed = seed.abs() as u64;
     let mut seen = Seen::new(if distinct { count as usize } else { 0 });
     let mut spare = seed.wrapping_add(count as u64);
@@ -283,7 +306,8 @@ impl Seen {
 
 struct Request {
     length: u32,
-    answer: f64,
+    /// The answers a task may have, the ends included, when `use_answer`.
+    answers: (f64, f64),
     use_answer: bool,
     brackets: bool,
     quiz_mode: bool,
@@ -293,12 +317,36 @@ struct Request {
     flat: bool,
 }
 
+impl Request {
+    fn new(
+        length: u32,
+        answers: (f64, f64),
+        use_answer: bool,
+        brackets: bool,
+        quiz_mode: bool,
+        allowed: u32,
+        max: u32,
+    ) -> Request {
+        Request {
+            length,
+            answers,
+            use_answer,
+            brackets,
+            quiz_mode,
+            ops: Ops::from_bits(allowed & !(NO_NEGATIVES | FLAT)).unwrap_or(Ops::ALL),
+            negatives: allowed & NO_NEGATIVES == 0,
+            max: max as i64,
+            flat: allowed & FLAT != 0,
+        }
+    }
+}
+
 /// Appends one task to `out`, or returns false and appends nothing when the
 /// operators cannot build it.
 fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) -> bool {
     let Request {
         length,
-        answer,
+        answers,
         use_answer,
         brackets,
         quiz_mode,
@@ -322,15 +370,26 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         flat,
     };
 
-    let (answer, expression) = if use_answer {
+    let (low, high) = if use_answer {
         // The wrappers have already turned away anything past max, where no
         // split fits and an f64 past i64 would saturate and then wrap.
-        let answer = answer.round() as i64;
-        assert!(answer.abs() <= max, "answer out of range");
-        let Some(expression) = expr::generate(&config(answer), &mut rng, tokens) else {
+        let (low, high) = (answers.0.round() as i64, answers.1.round() as i64);
+        assert!(
+            low <= high && low.abs() <= max && high.abs() <= max,
+            "answer out of range"
+        );
+        (low, high)
+    } else if max >= DEFAULT_ANSWER_HIGH {
+        (DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
+    } else {
+        ((max + 1) / 2, max)
+    };
+
+    let (answer, expression) = if low == high {
+        let Some(expression) = expr::generate(&config(low), &mut rng, tokens) else {
             return false;
         };
-        (answer, expression)
+        (low, expression)
     } else {
         // An answer the rules cannot build, such as 20 for `-` alone within
         // 20 without negatives, is set aside and another drawn from those
@@ -339,39 +398,46 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         // answer uniform over the ones that can be, and the first takes the
         // same number from the generator as `rng.range(low, high)`.
         //
+        // A range of more than `ANSWER_TRIES` answers is not walked through:
+        // that many are drawn from it, and the request is refused when none
+        // of them can be built, which for a range where hardly any answer
+        // can is the better answer than a wait.
+        //
         // An answer that runs short of room is grown again up to
         // `RESTARTS` times, which for 32 terms of `-` without brackets or
         // negatives takes 50 ms before it gives up. Its neighbours mostly
         // run short too, so the ones drawn after it get an eighth of that,
         // or a refusal would take eleven times as long.
-        let (low, high) = if max >= DEFAULT_ANSWER_HIGH {
-            (DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
-        } else {
-            ((max + 1) / 2, max)
-        };
-        let mut answers = [0; (DEFAULT_ANSWER_HIGH - DEFAULT_ANSWER_LOW + 1) as usize];
-        let mut left = (high - low + 1) as usize;
-        for (slot, answer) in answers[..left].iter_mut().zip(low..=high) {
-            *slot = answer;
+        let span = (high - low + 1) as u64;
+        let walked = span <= ANSWER_TRIES as u64;
+        let mut candidates = [0; ANSWER_TRIES];
+        let mut left = if walked { span as usize } else { ANSWER_TRIES };
+        if walked {
+            for (slot, answer) in candidates[..left].iter_mut().zip(low..=high) {
+                *slot = answer;
+            }
         }
+        let mut restarts = expr::RESTARTS;
         loop {
             if left == 0 {
                 return false;
             }
-            let restarts = if left == (high - low + 1) as usize {
-                expr::RESTARTS
+            let at = rng.below(if walked { left as u64 } else { span }) as usize;
+            let answer = if walked {
+                candidates[at]
             } else {
-                expr::RESTARTS / 8
+                low + at as i64
             };
-            let at = rng.below(left as u64) as usize;
-            let answer = answers[at];
             if let Some(expression) =
                 expr::generate_with(&config(answer), &mut rng, tokens, restarts)
             {
                 break (answer, expression);
             }
             left -= 1;
-            answers.swap(at, left);
+            if walked {
+                candidates.swap(at, left);
+            }
+            restarts = expr::RESTARTS / 8;
         }
     };
 
@@ -421,7 +487,7 @@ mod tests {
     ) -> Vec<i32> {
         let mut out = Vec::new();
         let built = fill_task(
-            &mut out, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+            &mut out, length, answer, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
         );
         if built {
             out
@@ -445,8 +511,8 @@ mod tests {
     ) -> Vec<i32> {
         let mut out = Vec::new();
         let built = fill_batch(
-            &mut out, count, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
-            distinct,
+            &mut out, count, length, answer, answer, use_answer, brackets, quiz_mode, allowed, max,
+            seed, distinct,
         );
         if built {
             out
@@ -469,11 +535,13 @@ mod tests {
 
     #[test]
     fn what_is_left_in_memory_is_what_the_vector_functions_give() {
-        let task = published(super::generate(5, 12.0, true, true, true, ALL, MAX, 77.0));
+        let task = published(super::generate(
+            5, 12.0, 12.0, true, true, true, ALL, MAX, 77.0,
+        ));
         assert_eq!(task, generate(5, 12.0, true, true, true, ALL, MAX, 77.0));
 
         let batch = published(super::generate_batch(
-            30, 4, 0.0, false, false, true, ALL, MAX, 5.0, true,
+            30, 4, 0.0, 0.0, false, false, true, ALL, MAX, 5.0, true,
         ));
         assert_eq!(
             batch,
@@ -487,6 +555,7 @@ mod tests {
         let none = published(super::generate(
             3,
             0.0,
+            0.0,
             true,
             false,
             false,
@@ -496,7 +565,9 @@ mod tests {
         ));
         assert!(none.is_empty());
         // And the next result is not left with the last one's integers.
-        let next = published(super::generate(2, 6.0, true, false, false, ALL, MAX, 3.0));
+        let next = published(super::generate(
+            2, 6.0, 6.0, true, false, false, ALL, MAX, 3.0,
+        ));
         assert_eq!(next[0], 6);
     }
 
@@ -648,6 +719,79 @@ mod tests {
     #[test]
     fn an_empty_batch_is_empty() {
         assert!(generate_batch(0, 4, 0.0, false, false, true, ALL, MAX, 1.0, true).is_empty());
+    }
+
+    /// One task for an answer drawn from `low..=high`, empty if none can be
+    /// built.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_in(
+        length: u32,
+        low: f64,
+        high: f64,
+        allowed: u32,
+        max: u32,
+        seed: f64,
+    ) -> Vec<i32> {
+        let mut out = Vec::new();
+        let built = fill_task(
+            &mut out, length, low, high, true, false, true, allowed, max, seed,
+        );
+        if built {
+            out
+        } else {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn an_answer_is_drawn_from_a_range_with_both_ends_in_it() {
+        let mut drawn = std::collections::BTreeMap::new();
+        for seed in 0..4400 {
+            let data = generate_in(3, 30.0, 40.0, ALL, MAX, seed as f64);
+            let decoded = decode(&data);
+            assert!(decoded.quiz.contains(&decoded.answer));
+            *drawn.entry(decoded.answer).or_insert(0u32) += 1;
+        }
+        assert_eq!(
+            drawn.keys().copied().collect::<Vec<i32>>(),
+            (30..=40).collect::<Vec<i32>>()
+        );
+        for (answer, count) in drawn {
+            assert!(count.abs_diff(400) < 100, "{answer} drawn {count} times");
+        }
+    }
+
+    #[test]
+    fn a_range_of_one_answer_is_that_answer_and_draws_nothing_for_it() {
+        for seed in 0..50 {
+            let in_range = generate_in(4, 17.0, 17.0, ALL, MAX, seed as f64);
+            let exact = generate(4, 17.0, true, false, true, ALL, MAX, seed as f64);
+            assert_eq!(in_range, exact);
+        }
+    }
+
+    #[test]
+    fn a_range_wider_than_the_answers_it_walks_is_drawn_from_across_its_width() {
+        let mut buckets = [0u32; 10];
+        for seed in 0..5000 {
+            let data = generate_in(3, -9000.0, 9000.0, ALL, MAX, seed as f64);
+            let answer = decode(&data).answer;
+            assert!((-9000..=9000).contains(&answer), "drew {answer}");
+            buckets[((answer + 9000) / 1800).min(9) as usize] += 1;
+        }
+        assert!(buckets.iter().all(|&count| count > 350), "{buckets:?}");
+    }
+
+    #[test]
+    fn a_range_is_refused_when_none_of_its_answers_can_be_built() {
+        const ADD: u32 = 1;
+        // With no negatives every term of a sum is at least 1, so 14 terms
+        // reach 14 at the least.
+        assert!(generate_in(14, 1.0, 13.0, ADD | NO_NEGATIVES, MAX, 1.0).is_empty());
+        let data = generate_in(14, 1.0, 20.0, ADD | NO_NEGATIVES, MAX, 1.0);
+        assert!(decode(&data).answer >= 14);
+        // And every one of 31 answers is below 32 terms.
+        assert!(generate_in(32, 0.0, 30.0, ADD | NO_NEGATIVES, MAX, 1.0).is_empty());
     }
 
     #[test]
