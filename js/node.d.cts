@@ -16,10 +16,12 @@ export interface MathGenOptions {
   answer?: number
   /** Ask for a task that groups part of itself in brackets, as in
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
-   *  numbers have no room for a group. Brackets may appear without this when
-   *  precedence requires them - the alternative would be a task that does
-   *  not evaluate to its answer - or to keep every step of working the task
-   *  out within max.
+   *  numbers have no room for a group. With `+` alone or `*` alone, where
+   *  grouping changes nothing, none is looked for, and where one is hard to
+   *  find, as for three numbers of `+` and `/` within 20, the task may come
+   *  without it. Brackets may appear without this when precedence requires
+   *  them - the alternative would be a task that does not evaluate to its
+   *  answer - or to keep every step of working the task out within max.
    *
    *  `'never'` builds a task that groups nothing, as `12-5-3` rather than
    *  `12-(5+3)`; a negative number still carries its own brackets. A long
