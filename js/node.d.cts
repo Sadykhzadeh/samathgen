@@ -84,6 +84,26 @@ export function mathGen (length: number, more?: MathGenOptions): MathGenResult
  */
 export function mathGenBatch (count: number, length: number, more?: MathGenOptions): MathGenResult[]
 
+/** What the global constructor `Name` makes, or `never` where nothing
+ *  declares one. A Node project has no DOM library, and naming `Response`
+ *  or `WebAssembly.Module` outright would fail to type-check there. */
+type Instance<Name extends string> =
+  typeof globalThis extends Record<Name, { prototype: infer T }> ? T : never
+
+type WasmModule =
+  typeof globalThis extends { WebAssembly: { Module: { prototype: infer T } } } ? T : never
+
+/** Where the browser entry point loads the WebAssembly from: a URL, a
+ *  fetch Response, the bytes or a compiled module. */
+type InitInput =
+  | string
+  | Instance<'URL'>
+  | Instance<'Request'>
+  | Instance<'Response'>
+  | ArrayBuffer
+  | ArrayBufferView
+  | WasmModule
+
 /**
  * Loads the WebAssembly module. In the browser, await it once before calling
  * `mathGen` or `mathGenBatch`, which throw until it has finished. A load
@@ -91,4 +111,7 @@ export function mathGenBatch (count: number, length: number, more?: MathGenOptio
  * the module is loaded with the package and this resolves at once, so the
  * same code runs in both.
  */
-export function init (input?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module): Promise<unknown>
+export function init (input?: InitInput | Promise<InitInput>): Promise<unknown>
+
+// The types above that are not exported stay private to this file.
+export {}
