@@ -11,14 +11,31 @@ pub struct Rng {
 
 const MULTIPLIER: u64 = 6364136223846793005;
 
+/// SplitMix64, which turns each step of a counter into a well-mixed number.
+fn splitmix64(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
 impl Rng {
+    /// The seed is mixed into both the starting state and the stream before
+    /// anything is drawn. Used as they are, consecutive seeds give states a
+    /// constant step apart, and the high bits PCG32 outputs are then a
+    /// counting sequence: the tasks of a batch, which are the tasks for
+    /// consecutive seeds, would follow a pattern.
     pub fn new(seed: u64) -> Self {
+        let mut mixer = seed;
+        let start = splitmix64(&mut mixer);
+        let stream = splitmix64(&mut mixer);
         let mut rng = Rng {
             state: 0,
-            inc: (seed << 1) | 1,
+            inc: (stream << 1) | 1,
         };
         rng.next_u32();
-        rng.state = rng.state.wrapping_add(seed);
+        rng.state = rng.state.wrapping_add(start);
         rng.next_u32();
         rng
     }
@@ -105,6 +122,30 @@ mod tests {
         let mut b = Rng::new(2);
         let diverged = (0..32).any(|_| a.next_u32() != b.next_u32());
         assert!(diverged);
+    }
+
+    #[test]
+    fn tasks_for_consecutive_seeds_are_independent() {
+        // A batch is the tasks for seed, seed + 1, seed + 2... so what one
+        // seed draws must say nothing about the next. A state that is only
+        // the seed, stepped, makes the high bits of consecutive seeds a
+        // counting sequence, and a worksheet then repeats a pattern.
+        const SIDE: usize = 11;
+        let draws = 120_000u64;
+        let mut cells = [[0u32; SIDE]; SIDE];
+        for seed in 0..draws {
+            let first = Rng::new(seed).below(SIDE as u64) as usize;
+            let next = Rng::new(seed + 1).below(SIDE as u64) as usize;
+            cells[first][next] += 1;
+        }
+        let expected = draws as f64 / (SIDE * SIDE) as f64;
+        let chi_squared: f64 = cells
+            .iter()
+            .flatten()
+            .map(|&count| (count as f64 - expected).powi(2) / expected)
+            .sum();
+        // 120 degrees of freedom: mean 120, deviation about 15.5.
+        assert!(chi_squared < 200.0, "chi-squared {chi_squared}");
     }
 
     #[test]
