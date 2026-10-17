@@ -489,10 +489,11 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
 
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
-    // Without brackets a prime is often left to `*` and `/` alone, and `*`
-    // can only make it `1*p`. A task full of `*1` teaches nothing, so that
-    // is the last resort there.
-    if config.flat && candidates.len() > 1 {
+    // A prime, or 1, can only be made by `*` as `1*p`, and a task full of
+    // `*1` teaches nothing, so `*` is the last resort for them. Without
+    // brackets a prime is often left to `*` and `/` alone, so it matters
+    // there most.
+    if candidates.len() > 1 {
         let mut divisors = [0; MAX_DIVISORS];
         useful_divisors(value, &mut divisors);
         if divisors[0] == 1 {
@@ -1465,6 +1466,71 @@ mod tests {
                     .unwrap_or_else(|| panic!("{value} by {op:?} within {max}, seed {seed}"));
                 assert_eq!(op.apply(left, right), value);
                 assert!(left.abs() <= max && right.abs() <= max);
+            }
+        }
+    }
+
+    /// Whether some `*` has a literal 1 or -1 for an operand.
+    fn has_unit_factor(tokens: &[Token]) -> bool {
+        use Token::{Close, Num, Open};
+        tokens.iter().enumerate().any(|(i, token)| {
+            *token == Token::Op(Op::Mul)
+                && (matches!(i.checked_sub(1).map(|at| tokens[at]), Some(Num(1)))
+                    || (i >= 3 && tokens[i - 3..i] == [Open, Num(-1), Close])
+                    || matches!(tokens.get(i + 1), Some(Num(1)))
+                    || tokens.get(i + 1..i + 4) == Some(&[Open, Num(-1), Close]))
+        })
+    }
+
+    #[test]
+    fn a_product_with_one_in_it_is_the_last_resort() {
+        // `1*13` and `7*(-1)` are not a multiplication exercise. A prime or
+        // a 1 is split by `+`, `-` or `/` first, so wherever one of those
+        // can do it no task has a factor of 1.
+        let sets = [
+            Ops::ALL,
+            Ops(Op::Add.bit() | Op::Mul.bit()),
+            Ops(Op::Sub.bit() | Op::Mul.bit()),
+            Ops(Op::Add.bit() | Op::Sub.bit() | Op::Mul.bit()),
+        ];
+        for ops in sets {
+            for (negatives, flat, max) in [
+                (true, false, MAX_ABS),
+                (false, false, MAX_ABS),
+                (true, false, 20),
+                (false, true, MAX_ABS),
+            ] {
+                // Without negatives `+` cannot split a 1, so with `*` alone
+                // beside it 1*1 is all there is.
+                if !negatives && !ops.has(Op::Sub) {
+                    continue;
+                }
+                // And without brackets what follows a `-` or a `*` may only
+                // be split by `*` and `/`: with `/` gone, a prime there is
+                // `1*p`.
+                if flat && !ops.has(Op::Div) {
+                    continue;
+                }
+                for seed in 0..1000 {
+                    let config = Config {
+                        answer: 10 + (seed % 11) as i64,
+                        length: 2 + (seed % 7) as usize,
+                        brackets: seed % 2 == 0,
+                        ops,
+                        negatives,
+                        max,
+                        flat,
+                    };
+                    let Some(expr) = generate(&config, &mut Rng::new(seed), &mut Vec::new()) else {
+                        continue;
+                    };
+                    let tokens = expr.tokens();
+                    assert!(
+                        !has_unit_factor(&tokens),
+                        "{} from seed {seed}, {config:?}",
+                        render(&tokens)
+                    );
+                }
             }
         }
     }

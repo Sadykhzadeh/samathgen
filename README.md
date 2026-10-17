@@ -125,7 +125,10 @@ be:
   with `*` in it, or with both `+` and `-`, builds every task without
   brackets that it builds with them.
 
-With `*` alone a prime answer can only become `1 * p`, so expect plenty of
+A prime, or a 1, is only a product as `1 * p`, which is no multiplication
+exercise, so `*` is the last thing tried for them: no task has a factor of 1
+unless the operators leave nothing else to split with, as with `*` alone,
+where a prime answer can only become `1 * p` and you should expect plenty of
 ones. By default about one task in three of length 3 contains a negative
 number, and one in two of length 5.
 
@@ -135,7 +138,7 @@ mathGen(3, { operators: ['+', '-'], negatives: false, max: 20, brackets: 'never'
 ```
 
 Without a `max`, numbers run well past the answer: with answers from 10 to
-20, a number past 100 turns up in 10% of tasks of two numbers and 34% of
+20, a number past 100 turns up in 10% of tasks of two numbers and 39% of
 tasks of eight, and adding and taking away without negatives passes 20 in
 57% of tasks of three. With `max: 20` none of them does. Without
 `brackets: 'never'`, 30% of those tasks of three and 56% of those of four
