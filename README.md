@@ -286,7 +286,7 @@ table sieved when the crate is compiled.
 
 Lengths cycling through 2..8 with quiz options on, Node 24, each figure the
 best of nine runs of 100 000 tasks, and the best of four such runs of the
-bench. 0.1.3 is the TypeScript version that npm serves:
+bench. 0.1.3 is the TypeScript version that npm served before 1.0.0:
 
 | | per task | tasks per second |
 | --- | --- | --- |
