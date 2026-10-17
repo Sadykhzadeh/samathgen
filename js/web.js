@@ -114,14 +114,29 @@ const readOperators = (operators) => {
   return bits
 }
 
+// A flag is true or false, and left out or null it is `fallback`. Anything
+// else is refused: a "false" read from a query string, or a 0, left out as
+// if the option had not been given, would hand a class that has not met
+// negative numbers the very tasks it asked to be spared.
+const readFlag = (name, value, fallback) => {
+  if (value === undefined || value === null) return fallback
+  if (typeof value !== 'boolean') {
+    const got = typeof value === 'string' || typeof value === 'number' ? JSON.stringify(value) : typeof value
+    throw new TypeError(`${name} must be true or false, got ${got}`)
+  }
+  return value
+}
+
 // Only `brackets: 'never'` rules out a group. Any other string, such as
 // 'Never' or a 'false' read from a query string, would quietly leave
-// brackets in, so it is refused.
+// brackets in, so it is refused, and so is anything else that is not a flag.
 const readBrackets = (brackets) => {
   if (typeof brackets === 'string' && brackets !== 'never') {
     throw new RangeError(`brackets must be true, false or 'never', got ${JSON.stringify(brackets)}`)
   }
-  return brackets === 'never' ? FLAT : 0
+  if (brackets === 'never') return FLAT
+  readFlag('brackets', brackets, false)
+  return 0
 }
 
 // What may appear in the task, as the one integer the WebAssembly takes.
@@ -129,7 +144,7 @@ const readBrackets = (brackets) => {
 // and only `brackets: 'never'` rules out a group.
 const readAllowed = (options, answer) => {
   const allowed = readOperators(options.operators) | readBrackets(options.brackets)
-  if (options.negatives !== false) return allowed
+  if (readFlag('negatives', options.negatives, true)) return allowed
   if (answer < 0) {
     throw new RangeError(`answer ${answer} is negative, but negatives is false`)
   }
@@ -209,7 +224,7 @@ export const mathGen = (length, more) => {
     answer === undefined ? 0 : answer,
     answer !== undefined,
     options.brackets === true,
-    options.quizMode === true,
+    readFlag('quizMode', options.quizMode, false),
     allowed,
     max,
     seed
@@ -242,11 +257,11 @@ export const mathGenBatch = (count, length, more) => {
     answer === undefined ? 0 : answer,
     answer !== undefined,
     options.brackets === true,
-    options.quizMode === true,
+    readFlag('quizMode', options.quizMode, false),
     allowed,
     max,
     seed,
-    options.distinct === true
+    readFlag('distinct', options.distinct, false)
   ))
   if (ints[at] === 0 && count > 0) throw cannotBuild(length, answer, max, options)
   const tasks = new Array(count)

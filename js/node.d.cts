@@ -27,10 +27,11 @@ export interface MathGenOptions {
    *  `12-(5+3)`; a negative number still carries its own brackets. A long
    *  task of `/` alone, or of `-` alone without negatives, then throws a
    *  RangeError, and so can one of `-` with `/`, or of `+` with `/` without
-   *  negatives. Any other string is a RangeError too. */
+   *  negatives. Any other string is a RangeError too, and any other value
+   *  that is not true or false a TypeError. */
   brackets?: boolean | 'never'
   /** Fill `quizOptions` with the answer and three near misses, each within
-   *  5 of it. */
+   *  5 of it. A value that is not true or false throws a TypeError. */
   quizMode?: boolean
   /** The operators the task may use, e.g. `['+', '-']`. Default: all four.
    *  Throws a RangeError for an unknown or empty list, and for the two
@@ -41,7 +42,8 @@ export interface MathGenOptions {
    *  working the task out left to right at 0 or above. A RangeError is then
    *  thrown for a negative answer, an answer of 0 without `-`, `+` alone
    *  with an answer smaller than the length, and an answer of max itself
-   *  with neither `+` nor `*`. Default: true. */
+   *  with neither `+` nor `*`. A value that is not true or false, such as the
+   *  string 'false', throws a TypeError. Default: true. */
   negatives?: boolean
   /** How far from zero any number may be: every number in the task, every
    *  step of working it out left to right and every quiz option. A whole
@@ -80,7 +82,8 @@ export interface MathGenBatchOptions extends MathGenOptions {
   /** Leave no task in the batch that repeats one before it: a repeat is
    *  replaced by the task for the next seed from `seed + count` on, and
    *  kept only once 16 of those in a row repeat too, as when the options
-   *  allow fewer tasks than `count`. Default: false. */
+   *  allow fewer tasks than `count`. A value that is not true or false
+   *  throws a TypeError. Default: false. */
   distinct?: boolean
 }
 

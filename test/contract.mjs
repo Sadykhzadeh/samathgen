@@ -239,8 +239,11 @@ const suite = (mathGen, mathGenBatch) => {
       assert.throws(() => mathGen(4, { brackets, seed: 1 }), /brackets must be true, false or 'never'/, JSON.stringify(brackets))
       assert.throws(() => mathGenBatch(2, 4, { brackets, seed: 1 }), RangeError, JSON.stringify(brackets))
     }
-    for (const brackets of [undefined, null, false, 0]) {
+    for (const brackets of [undefined, null, false]) {
       assert.deepEqual(mathGen(4, { brackets, seed: 1 }), mathGen(4, { seed: 1 }), String(brackets))
+    }
+    for (const brackets of [0, 1, {}, [], () => true]) {
+      assert.throws(() => mathGen(4, { brackets, seed: 1 }), TypeError, String(brackets))
     }
   })
 
@@ -331,7 +334,7 @@ const suite = (mathGen, mathGenBatch) => {
     // Ten as a sum of two numbers from 1 up is one of nine tasks.
     const sums = mathGenBatch(30, 2, { answer: 10, operators: ['+'], negatives: false, distinct: true, seed: 1 })
     assert.equal(new Set(sums.map((task) => task.task.join(''))).size, 9)
-    for (const distinct of [false, 1, 'true', null]) {
+    for (const distinct of [false, null, undefined]) {
       assert.deepEqual(mathGenBatch(20, 2, { seed: 5, distinct }), mathGenBatch(20, 2, { seed: 5 }), String(distinct))
     }
     assert.deepEqual(mathGen(2, { seed: 5, distinct: true }), mathGen(2, { seed: 5 }))
@@ -410,14 +413,32 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
-  check('negatives are only ruled out by an explicit false', () => {
+  check('negatives are on unless false, and null or undefined mean the default', () => {
     for (let seed = 0; seed < 300; seed++) {
       const plain = mathGen(6, { seed, quizMode: true })
-      assert.deepEqual(mathGen(6, { seed, quizMode: true, negatives: true }), plain)
-      assert.deepEqual(mathGen(6, { seed, quizMode: true, negatives: 0 }), plain)
+      for (const negatives of [true, null, undefined]) {
+        assert.deepEqual(mathGen(6, { seed, quizMode: true, negatives }), plain)
+      }
     }
     const all = mathGenBatch(500, 6, { seed: 1 }).flatMap((r) => r.task)
     assert.ok(all.some((t) => typeof t === 'number' && t < 0), 'no negative number in 500 tasks')
+  })
+
+  check('a flag that is not true or false is refused instead of read as the default', () => {
+    // A "false" from a query string or a 0 must not leave negative numbers
+    // in for a class that asked to be spared them.
+    for (const name of ['negatives', 'quizMode', 'brackets']) {
+      for (const value of ['false', 'true', '', 0, 1, {}, []]) {
+        const message = new RegExp(`${name} must be (true or false|true, false or 'never'), got`)
+        assert.throws(() => mathGen(4, { [name]: value, seed: 1 }), message, `${name}: ${JSON.stringify(value)}`)
+        assert.throws(() => mathGenBatch(2, 4, { [name]: value, seed: 1 }), message, `${name}: ${JSON.stringify(value)}`)
+      }
+    }
+    for (const value of ['false', 0, 1, {}]) {
+      assert.throws(() => mathGenBatch(2, 4, { distinct: value, seed: 1 }), /distinct must be true or false, got/, String(value))
+    }
+    assert.throws(() => mathGen(4, { negatives: 'false' }), /negatives must be true or false, got "false"/)
+    assert.throws(() => mathGen(4, { negatives: 0 }), /negatives must be true or false, got 0$/)
   })
 
   check('negatives: false refuses what it cannot build', () => {
