@@ -35,10 +35,27 @@ impl Rng {
         ((self.next_u32() as u64) << 32) | self.next_u32() as u64
     }
 
-    /// Uniform in `0..bound`. Rejection sampling, so there is no modulo bias -
-    /// `% bound` on its own would favour the low end of the range.
+    /// Uniform in `0..bound`, without the bias `% bound` on its own would
+    /// give the low end of the range.
+    ///
+    /// A bound that fits 32 bits, which is every one the generator asks for,
+    /// takes one draw and a multiplication (Lemire's method), and divides
+    /// only on the rare draw that lands in the biased sliver. Division is
+    /// the slow instruction in WebAssembly, and a 64-bit rejection loop
+    /// does two of it on every call.
     pub fn below(&mut self, bound: u64) -> u64 {
         assert!(bound > 0, "bound must be positive");
+        if bound <= u32::MAX as u64 {
+            let bound = bound as u32;
+            let mut product = self.next_u32() as u64 * bound as u64;
+            if (product as u32) < bound {
+                let threshold = bound.wrapping_neg() % bound;
+                while (product as u32) < threshold {
+                    product = self.next_u32() as u64 * bound as u64;
+                }
+            }
+            return product >> 32;
+        }
         let threshold = bound.wrapping_neg() % bound;
         loop {
             let value = self.next_u64();
@@ -51,7 +68,7 @@ impl Rng {
     /// Uniform in `low..=high`.
     pub fn range(&mut self, low: i64, high: i64) -> i64 {
         assert!(low <= high, "empty range");
-        let span = (high as i128 - low as i128 + 1) as u64;
+        let span = (high.wrapping_sub(low) as u64).wrapping_add(1);
         low.wrapping_add(self.below(span) as i64)
     }
 
@@ -112,6 +129,29 @@ mod tests {
             }
         }
         assert!(low && high, "endpoints were never drawn");
+    }
+
+    #[test]
+    fn below_is_uniform_whatever_the_size_of_the_bound() {
+        // 7 and 10 000 do not divide 2^32, so a draw reduced with `%` alone
+        // would favour the low end; a bound past 32 bits takes the other
+        // path.
+        for bound in [7u64, 10_000, (1 << 33) + 5] {
+            let mut rng = Rng::new(bound);
+            let draws = 200_000u32;
+            let buckets = bound.min(8) as usize;
+            let mut counts = vec![0u32; buckets];
+            for _ in 0..draws {
+                let value = rng.below(bound);
+                assert!(value < bound);
+                counts[(value as u128 * buckets as u128 / bound as u128) as usize] += 1;
+            }
+            let expected = draws as f64 / buckets as f64;
+            for (bucket, &count) in counts.iter().enumerate() {
+                let drift = (count as f64 - expected).abs() / expected;
+                assert!(drift < 0.05, "bound {bound}: bucket {bucket} drew {count}");
+            }
+        }
     }
 
     #[test]
