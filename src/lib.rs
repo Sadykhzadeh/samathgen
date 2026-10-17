@@ -405,7 +405,8 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         //
         // An answer that runs short of room is grown again up to
         // `RESTARTS` times, which for 32 terms of `-` without brackets or
-        // negatives takes 50 ms before it gives up. Its neighbours mostly
+        // negatives takes a couple of milliseconds before it gives up. Its
+        // neighbours mostly
         // run short too, so the ones drawn after it get an eighth of that,
         // or a refusal would take eleven times as long.
         let span = (high - low + 1) as u64;
