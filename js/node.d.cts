@@ -93,8 +93,8 @@ export interface MathGenBatchOptions extends MathGenOptions {
 }
 
 /**
- * Builds `count` tasks in a single call into WebAssembly, about twice as fast
- * per task as calling `mathGen` in a loop. Task `i` is exactly what
+ * Builds `count` tasks in a single call into WebAssembly, a little faster per
+ * task than calling `mathGen` in a loop. Task `i` is exactly what
  * `mathGen(length, { ...more, seed: seed + i })` gives, unless `distinct`
  * replaced it.
  *

@@ -226,8 +226,9 @@ group, and 92% without negatives.
 ### `mathGenBatch(count, length, more?)`
 
 Builds `count` tasks in one call, for a worksheet or a whole quiz. It takes the
-same options as `mathGen` and returns an array of the same results, about
-twice as fast per task (see [On speed](#on-speed)).
+same options as `mathGen` and returns an array of the same results, a little
+faster per task (see [On speed](#on-speed)) and with a single seed for all of
+them.
 
 Task `i` is exactly what `mathGen(length, { ...more, seed: seed + i })` would
 give, so one seed reproduces the whole batch, and the third task of a
@@ -274,39 +275,38 @@ suite — twenty random cases — failed on roughly two runs in three.
 
 ### On speed
 
-A call used to hand its result to JavaScript as a JSON string, and that cost
-more than building the task: formatting the string in Rust, decoding it on the
-other side and running `JSON.parse` over it. The result now crosses as a short
-array of integers that the wrapper turns into the same object. Building the
-tree no longer allocates on every split either. A given seed produces exactly
-the same task as before both changes.
+Where a call spends its time, most of it first: growing the tree (picking a
+leaf, splitting it), writing it out with its brackets, and the rest of the
+bookkeeping. Crossing into WebAssembly costs little, since a task crosses as a
+handful of integers that the wrapper reads where the WebAssembly left them,
+without a copy or a string in between, and the tree lives in one vector rather
+than in a box per node. A number drawn within bounds is drawn from the part of
+the range that fits, and a prime is told from a composite by a lookup in a
+table sieved when the crate is compiled.
 
-Lengths cycling through 2..8 with quiz options on, Node 24. Every version runs
-in turn in one process and is timed by the CPU time it used, best of 11 runs
-of 400 000 tasks:
+Lengths cycling through 2..8 with quiz options on, Node 24, each figure the
+best of nine runs of 100 000 tasks, and the best of four such runs of the
+bench. 0.1.3 is the TypeScript version that npm serves:
 
-| Version | per task | with brackets |
+| | per task | tasks per second |
 | --- | --- | --- |
-| 0.1.3, TypeScript | 1.01 µs | 1.79 µs |
-| 1.0, result as JSON | 2.31 µs | 2.54 µs |
-| 1.0, result as integers | 1.09 µs | 1.21 µs |
-| 1.0, no allocation per split | 0.90 µs | 1.05 µs |
+| 0.1.3, `mathGen` | 0.98 µs | 1.0 million |
+| 0.1.3, with brackets | 1.78 µs | 0.56 million |
+| `mathGen` | 0.60 µs | 1.7 million |
+| `mathGen`, with brackets | 0.79 µs | 1.3 million |
+| `mathGenBatch`, 10 to a call | 0.57 µs | 1.8 million |
+| `mathGenBatch`, 100 to a call | 0.56 µs | 1.8 million |
+| `mathGenBatch`, 1000 to a call | 0.52 µs | 1.9 million |
 
-Each call still crosses into WebAssembly and back once, and copies its result
-out. `mathGenBatch` does that once for the whole batch, measured the same way
-without brackets:
+A batch crosses the boundary once for all of its tasks, which is most of what
+there is to gain from it now. The WebAssembly is 32 846 bytes, 14 719
+gzipped, compiled for speed rather than size.
 
-| Tasks per call | per task |
-| --- | --- |
-| 1, `mathGen` | 0.98 µs |
-| 10 | 0.58 µs |
-| 100 | 0.55 µs |
-| 1000 | 0.51 µs |
-
-The WebAssembly shrank with it, by 4.6 kB (26 545 to 21 889 bytes at the
-time, 12 359 to 10 420 gzipped), because nothing formats text any more.
-
-`npm run bench` prints the figures for your machine.
+`npm run bench` prints the figures for your machine, and with
+`SAMATHGEN_BASELINE` set to another install of samathgen (for 0.1.3,
+`npm install --prefix /tmp/old samathgen@0.1.3`, then
+`SAMATHGEN_BASELINE=/tmp/old/node_modules/samathgen`) it runs that one through
+the same loop beside it.
 
 ## Building from source
 
