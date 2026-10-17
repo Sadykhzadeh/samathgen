@@ -430,6 +430,30 @@ pub fn render(tokens: &[Token]) -> String {
 /// have 64.
 const MAX_DIVISORS: usize = 64;
 
+/// One bit for each number up to `MAX_ABS`, set when it has a divisor beside 1
+/// and itself. Sieved when the crate is compiled, so telling a prime from
+/// anything else costs a lookup, not a count up to its square root.
+const COMPOSITE: [u64; MAX_ABS as usize / 64 + 1] = {
+    let mut bits = [0; MAX_ABS as usize / 64 + 1];
+    let mut d = 2;
+    while d * d <= MAX_ABS as usize {
+        let mut multiple = d * d;
+        while multiple <= MAX_ABS as usize {
+            bits[multiple / 64] |= 1 << (multiple % 64);
+            multiple += d;
+        }
+        d += 1;
+    }
+    bits
+};
+
+/// Whether `|value|` is something `*` can make without a factor of 1: not 0,
+/// 1 or a prime.
+fn is_composite(value: i64) -> bool {
+    let magnitude = value.unsigned_abs() as usize;
+    COMPOSITE[magnitude / 64] >> (magnitude % 64) & 1 == 1
+}
+
 /// Divisors of `|value|` worth using, which is everything but 1 and the
 /// value itself - `1 * 12` and `12 * 1` are not a multiplication exercise.
 /// For a prime there is nothing else, so those come back as the fallback.
@@ -484,13 +508,7 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
     // `*1` teaches nothing, so `*` is left out for them unless the caller
     // allows it, and then it is the last resort. Without brackets a prime is
     // often left to `*` and `/` alone, so it matters there most.
-    let mut divisors = [0; MAX_DIVISORS];
-    let mut divisor_count = 0;
-    let mut only_units = false;
-    if wants(Op::Mul) {
-        divisor_count = useful_divisors(value, &mut divisors);
-        only_units = divisors[0] == 1;
-    }
+    let only_units = wants(Op::Mul) && !is_composite(value);
 
     let mut candidates = [Op::Add; 4];
     let mut count = 0;
@@ -509,7 +527,7 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
         }
     }
     for &op in candidates.iter() {
-        if let Some(split) = try_split(value, op, config, &divisors[..divisor_count], rng) {
+        if let Some(split) = try_split(value, op, config, rng) {
             return Some(split);
         }
     }
@@ -530,15 +548,7 @@ fn occasionally_negative(rng: &mut Rng) -> i64 {
     }
 }
 
-/// `divisors` is what `useful_divisors` gave for the value, which only `*`
-/// looks at.
-fn try_split(
-    value: i64,
-    op: Op,
-    config: &Config,
-    divisors: &[i64],
-    rng: &mut Rng,
-) -> Option<(i64, Op, i64)> {
+fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
     let negatives = config.negatives;
     // The sign that keeps an operand on the same side of zero as the value
     // it came from.
@@ -552,6 +562,13 @@ fn try_split(
         } else {
             1
         }
+    };
+
+    let mut divisors = [0; MAX_DIVISORS];
+    let divisor_count = if op == Op::Mul {
+        useful_divisors(value, &mut divisors)
+    } else {
+        0
     };
 
     // A handful of attempts. The size of each draw is fitted to the bounds
@@ -599,7 +616,7 @@ fn try_split(
                 (value + right, Op::Sub, right)
             }
             Op::Mul => {
-                let left = *rng.pick(divisors) * flip(rng);
+                let left = *rng.pick(&divisors[..divisor_count]) * flip(rng);
                 if left == 0 || value % left != 0 {
                     continue;
                 }
@@ -1008,6 +1025,18 @@ mod tests {
             }
             let count = useful_divisors(value, &mut out);
             assert_eq!(&out[..count], reference(value).as_slice(), "{value}");
+        }
+    }
+
+    #[test]
+    fn composite_is_what_has_a_divisor_besides_one_and_itself() {
+        for value in -MAX_ABS..=MAX_ABS {
+            let mut out = [0; MAX_DIVISORS];
+            let count = useful_divisors(value, &mut out);
+            let has_one = value != 0 && out[0] == 1 && count > 0;
+            // 0 and 1 and the primes are what useful_divisors answers 1 or
+            // nothing for.
+            assert_eq!(is_composite(value), value != 0 && !has_one, "{value}");
         }
     }
 
@@ -1505,7 +1534,7 @@ mod tests {
                 (2, Op::Sub, 10),
                 (10, Op::Add, 10),
             ] {
-                let (left, _, right) = try_split(value, op, &config(max), &[], &mut rng)
+                let (left, _, right) = try_split(value, op, &config(max), &mut rng)
                     .unwrap_or_else(|| panic!("{value} by {op:?} within {max}, seed {seed}"));
                 assert_eq!(op.apply(left, right), value);
                 assert!(left.abs() <= max && right.abs() <= max);
