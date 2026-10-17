@@ -234,6 +234,16 @@ const suite = (mathGen, mathGenBatch) => {
     )
   })
 
+  check("a brackets string other than 'never' is refused rather than read as false", () => {
+    for (const brackets of ['Never', 'none', 'false', 'true', '']) {
+      assert.throws(() => mathGen(4, { brackets, seed: 1 }), /brackets must be true, false or 'never'/, JSON.stringify(brackets))
+      assert.throws(() => mathGenBatch(2, 4, { brackets, seed: 1 }), RangeError, JSON.stringify(brackets))
+    }
+    for (const brackets of [undefined, null, false, 0]) {
+      assert.deepEqual(mathGen(4, { brackets, seed: 1 }), mathGen(4, { seed: 1 }), String(brackets))
+    }
+  })
+
   check('the task is made only of numbers, operators and brackets', () => {
     const allowed = new Set(['+', '-', '*', '/', '(', ')'])
     for (let seed = 0; seed < 2000; seed++) {

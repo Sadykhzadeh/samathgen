@@ -25,7 +25,7 @@ export interface MathGenOptions {
    *  `12-(5+3)`; a negative number still carries its own brackets. A long
    *  task of `/` alone, or of `-` alone without negatives, then throws a
    *  RangeError, and so can one of `-` with `/`, or of `+` with `/` without
-   *  negatives. */
+   *  negatives. Any other string is a RangeError too. */
   brackets?: boolean | 'never'
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. */
