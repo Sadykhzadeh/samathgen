@@ -2,7 +2,7 @@
 // synchronously on a browser's main thread, so `init()` has to be awaited
 // once before mathGen can be called. Node callers get the synchronous
 // loader instead and need none of this.
-import initWasm, { generate, generate_batch as generateBatch } from '../dist/web/samathgen.js'
+import initWasm, { generate, generate_batch as generateBatch, wasm_memory as getMemory } from '../dist/web/samathgen.js'
 
 const LENGTH_MIN = 2
 const LENGTH_MAX = 32
@@ -40,6 +40,17 @@ const decode = (data, start) => {
 
 let loading = null
 let ready = false
+
+// A call leaves its result in the module's memory, at the address it returns,
+// as a count of integers and then those integers, and they are read from
+// there without a copy. The view is made again when the memory has grown,
+// which detaches the old one. `read` gives the index the count is at.
+let memory = null
+let ints = null
+const read = (pointer) => {
+  if (ints.buffer !== memory.buffer) ints = new Int32Array(memory.buffer)
+  return pointer >>> 2
+}
 
 const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 
@@ -162,6 +173,8 @@ export const init = (input) => {
   // wasm-bindgen takes the override wrapped in an object now, and logs a
   // deprecation warning for every bare argument it is still handed.
   loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input }).then((exports) => {
+    memory = getMemory()
+    ints = new Int32Array(memory.buffer)
     ready = true
     return exports
   }, (error) => {
@@ -191,7 +204,7 @@ export const mathGen = (length, more) => {
   const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
-  const data = generate(
+  const at = read(generate(
     clampLength(length),
     answer === undefined ? 0 : answer,
     answer !== undefined,
@@ -200,9 +213,9 @@ export const mathGen = (length, more) => {
     allowed,
     max,
     seed
-  )
-  if (data.length === 0) throw cannotBuild(length, answer, max, options)
-  return decode(data, 0)
+  ))
+  if (ints[at] === 0) throw cannotBuild(length, answer, max, options)
+  return decode(ints, at + 1)
 }
 
 /**
@@ -223,7 +236,7 @@ export const mathGenBatch = (count, length, more) => {
   const allowed = readAllowed(options, answer)
   const seed = readSeed(options.seed)
 
-  const data = generateBatch(
+  const at = read(generateBatch(
     count,
     clampLength(length),
     answer === undefined ? 0 : answer,
@@ -234,14 +247,14 @@ export const mathGenBatch = (count, length, more) => {
     max,
     seed,
     options.distinct === true
-  )
-  if (data.length === 0 && count > 0) throw cannotBuild(length, answer, max, options)
+  ))
+  if (ints[at] === 0 && count > 0) throw cannotBuild(length, answer, max, options)
   const tasks = new Array(count)
-  let at = 0
+  let next = at + 1
   for (let i = 0; i < count; i++) {
-    const result = decode(data, at)
+    const result = decode(ints, next)
     tasks[i] = result
-    at += 3 + result.quizOptions.length + result.task.length
+    next += 3 + result.quizOptions.length + result.task.length
   }
   return tasks
 }

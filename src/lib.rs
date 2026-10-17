@@ -17,7 +17,9 @@ mod rng;
 
 use expr::{Config, Ops, Token};
 use rng::Rng;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
 
 /// Default answer range. Under a max below 20 it is half the max up to the
 /// max instead.
@@ -42,7 +44,48 @@ fn code(token: Token) -> i32 {
     }
 }
 
-/// Produces `[answer, option count, options..., token count, tokens...]`.
+// Where a result is left for JavaScript to read in place. It is kept
+// between calls, so a call neither allocates a vector for its result nor
+// has the glue copy it out and free it again: for a single task, that was
+// a quarter of the cost of the call.
+thread_local! {
+    static RESULT: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A result bigger than this, a batch of thousands, is let go of at the
+/// next call rather than kept.
+const RESULT_KEEP: usize = 1 << 14;
+
+/// Runs `fill` on the shared result vector, which starts with room for its
+/// length, and returns where it begins in memory: the length of what
+/// follows, then the integers. A length of 0 means `fill` could not build
+/// what was asked.
+fn publish(fill: impl FnOnce(&mut Vec<i32>) -> bool) -> *const i32 {
+    RESULT.with(|result| {
+        let mut out = result.borrow_mut();
+        if out.capacity() > RESULT_KEEP {
+            *out = Vec::new();
+        }
+        out.clear();
+        out.push(0);
+        if fill(&mut out) {
+            out[0] = (out.len() - 1) as i32;
+        } else {
+            out.truncate(1);
+        }
+        out.as_ptr()
+    })
+}
+
+/// The WebAssembly memory, for the glue to read results from.
+#[wasm_bindgen]
+pub fn wasm_memory() -> JsValue {
+    wasm_bindgen::memory()
+}
+
+/// Produces `[answer, option count, options..., token count, tokens...]`,
+/// at the address returned, after a first integer saying how many follow.
+/// Those are valid until the next call.
 ///
 /// `seed` makes a run reproducible. The JavaScript wrapper draws one when the
 /// caller does not supply it. `allowed` has bit `1 << n` set for each of
@@ -50,7 +93,7 @@ fn code(token: Token) -> i32 {
 /// every number in it at 0 or above and `FLAT` to group nothing in brackets. `max` keeps every number in it, every
 /// step of working it out and every option within that far of zero.
 ///
-/// An empty array means those rules cannot build a task of that length for
+/// A count of 0 means those rules cannot build a task of that length for
 /// that answer, or without `use_answer` for any answer it would draw; see
 /// `expr::generate`.
 #[wasm_bindgen]
@@ -64,8 +107,27 @@ pub fn generate(
     allowed: u32,
     max: u32,
     seed: f64,
-) -> Vec<i32> {
-    let mut out = Vec::with_capacity(64);
+) -> *const i32 {
+    publish(|out| {
+        fill_task(
+            out, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+        )
+    })
+}
+
+/// `generate` for one task, appended to `out`.
+#[allow(clippy::too_many_arguments)]
+fn fill_task(
+    out: &mut Vec<i32>,
+    length: u32,
+    answer: f64,
+    use_answer: bool,
+    brackets: bool,
+    quiz_mode: bool,
+    allowed: u32,
+    max: u32,
+    seed: f64,
+) -> bool {
     let request = Request {
         length,
         answer,
@@ -78,12 +140,11 @@ pub fn generate(
         flat: allowed & FLAT != 0,
     };
     write_task(
-        &mut out,
+        out,
         &mut Vec::with_capacity(96),
         &request,
         seed.abs() as u64,
-    );
-    out
+    )
 }
 
 /// `count` tasks laid out one after another as `generate` lays out one, task
@@ -107,8 +168,31 @@ pub fn generate_batch(
     max: u32,
     seed: f64,
     distinct: bool,
-) -> Vec<i32> {
-    let mut out = Vec::with_capacity(count as usize * 24);
+) -> *const i32 {
+    publish(|out| {
+        fill_batch(
+            out, count, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+            distinct,
+        )
+    })
+}
+
+/// `generate_batch`, appended to `out`.
+#[allow(clippy::too_many_arguments)]
+fn fill_batch(
+    out: &mut Vec<i32>,
+    count: u32,
+    length: u32,
+    answer: f64,
+    use_answer: bool,
+    brackets: bool,
+    quiz_mode: bool,
+    allowed: u32,
+    max: u32,
+    seed: f64,
+    distinct: bool,
+) -> bool {
+    out.reserve(count as usize * 24);
     let mut tokens = Vec::with_capacity(96);
     let request = Request {
         length,
@@ -126,8 +210,8 @@ pub fn generate_batch(
     let mut spare = seed.wrapping_add(count as u64);
     for i in 0..count {
         let start = out.len();
-        if !write_task(&mut out, &mut tokens, &request, seed.wrapping_add(i as u64)) {
-            return Vec::new();
+        if !write_task(out, &mut tokens, &request, seed.wrapping_add(i as u64)) {
+            return false;
         }
         if !distinct {
             continue;
@@ -135,14 +219,14 @@ pub fn generate_batch(
         let mut tries = 0;
         while !seen.insert(&tokens) && tries < DISTINCT_TRIES {
             out.truncate(start);
-            if !write_task(&mut out, &mut tokens, &request, spare) {
-                return Vec::new();
+            if !write_task(out, &mut tokens, &request, spare) {
+                return false;
             }
             spare = spare.wrapping_add(1);
             tries += 1;
         }
     }
-    out
+    true
 }
 
 /// How many tasks in a row a distinct batch draws in place of a repeat
@@ -321,6 +405,100 @@ mod tests {
 
     const ALL: u32 = 0b1111;
     const MAX: u32 = expr::MAX_ABS as u32;
+
+    // The tests read the integers of a result as a vector, empty when the
+    // task cannot be built, which is how the exports used to hand them over.
+    #[allow(clippy::too_many_arguments)]
+    fn generate(
+        length: u32,
+        answer: f64,
+        use_answer: bool,
+        brackets: bool,
+        quiz_mode: bool,
+        allowed: u32,
+        max: u32,
+        seed: f64,
+    ) -> Vec<i32> {
+        let mut out = Vec::new();
+        let built = fill_task(
+            &mut out, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+        );
+        if built {
+            out
+        } else {
+            Vec::new()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_batch(
+        count: u32,
+        length: u32,
+        answer: f64,
+        use_answer: bool,
+        brackets: bool,
+        quiz_mode: bool,
+        allowed: u32,
+        max: u32,
+        seed: f64,
+        distinct: bool,
+    ) -> Vec<i32> {
+        let mut out = Vec::new();
+        let built = fill_batch(
+            &mut out, count, length, answer, use_answer, brackets, quiz_mode, allowed, max, seed,
+            distinct,
+        );
+        if built {
+            out
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// What the exports leave in memory: the integers after the length that
+    /// leads them.
+    fn published(pointer: *const i32) -> Vec<i32> {
+        // SAFETY: `publish` returns the start of the shared vector, whose
+        // first integer is the count of those after it, and nothing touches
+        // it until the next call.
+        unsafe {
+            let length = *pointer as usize;
+            std::slice::from_raw_parts(pointer.add(1), length).to_vec()
+        }
+    }
+
+    #[test]
+    fn what_is_left_in_memory_is_what_the_vector_functions_give() {
+        let task = published(super::generate(5, 12.0, true, true, true, ALL, MAX, 77.0));
+        assert_eq!(task, generate(5, 12.0, true, true, true, ALL, MAX, 77.0));
+
+        let batch = published(super::generate_batch(
+            30, 4, 0.0, false, false, true, ALL, MAX, 5.0, true,
+        ));
+        assert_eq!(
+            batch,
+            generate_batch(30, 4, 0.0, false, false, true, ALL, MAX, 5.0, true)
+        );
+    }
+
+    #[test]
+    fn a_task_that_cannot_be_built_leaves_a_length_of_zero() {
+        // Zero is not a product of anything but zero.
+        let none = published(super::generate(
+            3,
+            0.0,
+            true,
+            false,
+            false,
+            1 << 2,
+            MAX,
+            1.0,
+        ));
+        assert!(none.is_empty());
+        // And the next result is not left with the last one's integers.
+        let next = published(super::generate(2, 6.0, true, false, false, ALL, MAX, 3.0));
+        assert_eq!(next[0], 6);
+    }
 
     #[derive(PartialEq, Debug)]
     struct Decoded {

@@ -288,7 +288,21 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
-  check(`a batch keeps the contract too, ${(SAMPLES / 10).toLocaleString('en-US')} tasks`, () => {
+  check('results are read correctly after the memory has grown, and after a batch that grew it', () => {
+    // The biggest batch there is, of the longest tasks: more than a
+    // megabyte of integers, which the WebAssembly memory has to grow for.
+    const seed = 1000
+    const big = mathGenBatch(10000, 32, { quizMode: true, seed })
+    assert.equal(big.length, 10000)
+    for (const i of [0, 1, 5000, 9999]) {
+      assert.deepEqual(big[i], mathGen(32, { quizMode: true, seed: seed + i }), `task ${i}`)
+    }
+    // The result of the next, smaller call is not the tail of the big one.
+    assert.deepEqual(mathGenBatch(2, 3, { seed: 7 }), [mathGen(3, { seed: 7 }), mathGen(3, { seed: 8 })])
+    assert.deepEqual(mathGenBatch(0, 3), [])
+  })
+
+  check(`a batch keeps the contract too,${(SAMPLES / 10).toLocaleString('en-US')} tasks`, () => {
     let wrong = 0
     for (let i = 0; i < SAMPLES / 1000; i++) {
       for (const result of mathGenBatch(100, 2 + (i % 7), { brackets: i % 2 === 0, quizMode: true })) {
