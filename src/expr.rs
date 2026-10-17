@@ -478,10 +478,24 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
         value != 0,
         value != 0 && value.abs() * DIVISOR_MIN <= config.max,
     ];
+    let wants = |op: Op| usable[op as usize] && ops.has(op);
+
+    // A prime, or 1, can only be made by `*` as `1*p`, and a task full of
+    // `*1` teaches nothing, so `*` is left out for them unless the caller
+    // allows it, and then it is the last resort. Without brackets a prime is
+    // often left to `*` and `/` alone, so it matters there most.
+    let mut divisors = [0; MAX_DIVISORS];
+    let mut divisor_count = 0;
+    let mut only_units = false;
+    if wants(Op::Mul) {
+        divisor_count = useful_divisors(value, &mut divisors);
+        only_units = divisors[0] == 1;
+    }
+
     let mut candidates = [Op::Add; 4];
     let mut count = 0;
     for op in [Op::Add, Op::Sub, Op::Mul, Op::Div] {
-        if usable[op as usize] && ops.has(op) {
+        if wants(op) && !(op == Op::Mul && only_units && !config.units) {
             candidates[count] = op;
             count += 1;
         }
@@ -489,21 +503,13 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
 
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
-    // A prime, or 1, can only be made by `*` as `1*p`, and a task full of
-    // `*1` teaches nothing, so `*` is the last resort for them. Without
-    // brackets a prime is often left to `*` and `/` alone, so it matters
-    // there most.
-    if candidates.len() > 1 {
-        let mut divisors = [0; MAX_DIVISORS];
-        useful_divisors(value, &mut divisors);
-        if divisors[0] == 1 {
-            if let Some(at) = candidates.iter().position(|&op| op == Op::Mul) {
-                candidates[at..].rotate_left(1);
-            }
+    if only_units && candidates.len() > 1 {
+        if let Some(at) = candidates.iter().position(|&op| op == Op::Mul) {
+            candidates[at..].rotate_left(1);
         }
     }
     for &op in candidates.iter() {
-        if let Some(split) = try_split(value, op, config, rng) {
+        if let Some(split) = try_split(value, op, config, &divisors[..divisor_count], rng) {
             return Some(split);
         }
     }
@@ -524,7 +530,15 @@ fn occasionally_negative(rng: &mut Rng) -> i64 {
     }
 }
 
-fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+/// `divisors` is what `useful_divisors` gave for the value, which only `*`
+/// looks at.
+fn try_split(
+    value: i64,
+    op: Op,
+    config: &Config,
+    divisors: &[i64],
+    rng: &mut Rng,
+) -> Option<(i64, Op, i64)> {
     let negatives = config.negatives;
     // The sign that keeps an operand on the same side of zero as the value
     // it came from.
@@ -585,9 +599,7 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
                 (value + right, Op::Sub, right)
             }
             Op::Mul => {
-                let mut divisors = [0; MAX_DIVISORS];
-                let count = useful_divisors(value, &mut divisors);
-                let left = *rng.pick(&divisors[..count]) * flip(rng);
+                let left = *rng.pick(divisors) * flip(rng);
                 if left == 0 || value % left != 0 {
                     continue;
                 }
@@ -634,6 +646,10 @@ pub struct Config {
     /// When true, nothing in the task is grouped in brackets, and `brackets`
     /// is not asked. A negative number still carries its own.
     pub flat: bool,
+    /// Whether a prime, or 1, may be made as `1*p`. A task full of those
+    /// teaches nothing, so it is the last resort: the caller asks without it
+    /// first, and with it only when nothing else can be built.
+    pub units: bool,
 }
 
 /// A tree can grow into a corner where no leaf can be split within the
@@ -670,6 +686,12 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     (expr, leaves)
 }
 
+/// `generate_with` and the `RESTARTS` that are usual.
+#[cfg(test)]
+pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
+    generate_with(config, rng, tokens, RESTARTS)
+}
+
 /// Builds the task and writes its tokens into `tokens`, which the bracket
 /// check needs anyway, so the caller does not render it a second time.
 ///
@@ -688,12 +710,11 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
 /// negatives, is one chain whose first number grows with every term, and
 /// past a few terms it cannot be built. `-` with `/`, and `+` with `/`
 /// without negatives, run short of room too, sooner under a small max.
-pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
-    generate_with(config, rng, tokens, RESTARTS)
-}
-
-/// `generate`, growing a cornered tree again up to `restarts` times rather
-/// than `RESTARTS`.
+///
+/// Without `units`, `None` also for a number that only `1*p` can bring to
+/// the length asked for, as an answer of 13 for two numbers of `*` alone.
+///
+/// A cornered tree is grown again up to `restarts` times.
 pub fn generate_with(
     config: &Config,
     rng: &mut Rng,
@@ -899,6 +920,7 @@ mod tests {
                 negatives: true,
                 max: MAX_ABS,
                 flat: false,
+                units: true,
             },
             &mut rng,
         );
@@ -1009,6 +1031,7 @@ mod tests {
                             negatives: true,
                             max: MAX_ABS,
                             flat: false,
+                            units: true,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -1056,6 +1079,7 @@ mod tests {
                             negatives: false,
                             max: MAX_ABS,
                             flat: false,
+                            units: true,
                         };
                         let mut tokens = Vec::new();
                         let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -1107,6 +1131,7 @@ mod tests {
                                     negatives,
                                     max,
                                     flat: false,
+                                    units: true,
                                 };
                                 let mut tokens = Vec::new();
                                 let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -1194,6 +1219,7 @@ mod tests {
                                     negatives,
                                     max,
                                     flat: true,
+                                    units: true,
                                 };
                                 let mut tokens = Vec::new();
                                 let built = generate(&config, &mut Rng::new(seed), &mut tokens);
@@ -1251,6 +1277,7 @@ mod tests {
                             negatives,
                             max: MAX_ABS,
                             flat: false,
+                            units: true,
                         };
                         let mut tokens = Vec::new();
                         generate(&config, &mut Rng::new(seed), &mut tokens).unwrap();
@@ -1279,6 +1306,7 @@ mod tests {
                     negatives: true,
                     max: MAX_ABS,
                     flat: false,
+                    units: true,
                 },
                 &mut Rng::new(seed),
             )
@@ -1322,6 +1350,7 @@ mod tests {
                 negatives: true,
                 max: MAX_ABS,
                 flat: false,
+                units: true,
             },
             &mut rng,
         );
@@ -1342,6 +1371,7 @@ mod tests {
                     negatives: true,
                     max: MAX_ABS,
                     flat: false,
+                    units: true,
                 },
                 &mut rng,
             );
@@ -1411,6 +1441,7 @@ mod tests {
                             negatives,
                             max: MAX_ABS,
                             flat: false,
+                            units: true,
                         },
                         &mut Rng::new(seed),
                     );
@@ -1437,6 +1468,7 @@ mod tests {
                     negatives: true,
                     max: MAX_ABS,
                     flat: false,
+                    units: true,
                 },
                 &mut rng,
             );
@@ -1461,6 +1493,7 @@ mod tests {
             negatives: true,
             max,
             flat: false,
+            units: true,
         };
         for seed in 0..5000 {
             let mut rng = Rng::new(seed);
@@ -1472,7 +1505,7 @@ mod tests {
                 (2, Op::Sub, 10),
                 (10, Op::Add, 10),
             ] {
-                let (left, _, right) = try_split(value, op, &config(max), &mut rng)
+                let (left, _, right) = try_split(value, op, &config(max), &[], &mut rng)
                     .unwrap_or_else(|| panic!("{value} by {op:?} within {max}, seed {seed}"));
                 assert_eq!(op.apply(left, right), value);
                 assert!(left.abs() <= max && right.abs() <= max);
@@ -1530,6 +1563,7 @@ mod tests {
                         negatives,
                         max,
                         flat,
+                        units: true,
                     };
                     let Some(expr) = generate(&config, &mut Rng::new(seed), &mut Vec::new()) else {
                         continue;
@@ -1555,6 +1589,7 @@ mod tests {
             negatives: true,
             max: MAX_ABS,
             flat: false,
+            units: true,
         };
         let first = render(&build(&config, &mut Rng::new(99)).tokens());
         let second = render(&build(&config, &mut Rng::new(99)).tokens());

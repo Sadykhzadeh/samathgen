@@ -15,11 +15,18 @@ mod expr;
 mod options;
 mod rng;
 
-use expr::{Config, Ops, Token};
+use expr::{Config, Op, Ops, Token};
 use rng::Rng;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+
+/// How many times a tree is grown again when a factor of 1 is not allowed.
+/// Few: where it can be built without one it almost always is at the first
+/// try, and where it cannot, as with `*` alone and an answer of 13, growing
+/// it again is the same tree, and the answers that allow one are not waiting
+/// for it.
+const WITHOUT_UNITS_RESTARTS: usize = 1;
 
 /// How many answers of a range are tried before the request is refused: all
 /// of a range this small, this many drawn from a bigger one.
@@ -341,6 +348,65 @@ impl Request {
     }
 }
 
+/// Grows a task for an answer from `low..=high`, and says which.
+///
+/// An answer the rules cannot build, such as 20 for `-` alone within 20
+/// without negatives, is set aside and another drawn from those left, so
+/// `None` comes only when none of them can be built. Each draw is uniform
+/// over what is left, which makes the answer uniform over the ones that can
+/// be, and the first takes the same number from the generator as
+/// `rng.range(low, high)`.
+///
+/// A range of more than `ANSWER_TRIES` answers is not walked through: that
+/// many are drawn from it, and `None` comes when none of them can be built,
+/// which for a range where hardly any answer can is the better answer than a
+/// wait.
+///
+/// An answer that runs short of room is grown again up to `restarts` times,
+/// which for 32 terms of `-` without brackets or negatives takes a couple of
+/// milliseconds before it gives up. Its neighbours mostly run short too, so
+/// the ones drawn after it get an eighth of that, or a refusal would take
+/// eleven times as long.
+fn grow_for_some_answer(
+    (low, high): (i64, i64),
+    config: impl Fn(i64) -> Config,
+    restarts: usize,
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+) -> Option<(i64, expr::Expr)> {
+    if low == high {
+        return expr::generate_with(&config(low), rng, tokens, restarts).map(|e| (low, e));
+    }
+    let span = (high - low + 1) as u64;
+    let walked = span <= ANSWER_TRIES as u64;
+    let mut candidates = [0; ANSWER_TRIES];
+    let mut left = if walked { span as usize } else { ANSWER_TRIES };
+    if walked {
+        for (slot, answer) in candidates[..left].iter_mut().zip(low..=high) {
+            *slot = answer;
+        }
+    }
+    let later = restarts / 8;
+    let mut restarts = restarts;
+    while left > 0 {
+        let at = rng.below(if walked { left as u64 } else { span }) as usize;
+        let answer = if walked {
+            candidates[at]
+        } else {
+            low + at as i64
+        };
+        if let Some(expression) = expr::generate_with(&config(answer), rng, tokens, restarts) {
+            return Some((answer, expression));
+        }
+        left -= 1;
+        if walked {
+            candidates.swap(at, left);
+        }
+        restarts = later;
+    }
+    None
+}
+
 /// Appends one task to `out`, or returns false and appends nothing when the
 /// operators cannot build it.
 fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) -> bool {
@@ -360,7 +426,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         "max out of range"
     );
     let mut rng = Rng::new(seed);
-    let config = |answer| Config {
+    let config = |answer, units| Config {
         answer,
         length: length as usize,
         brackets,
@@ -368,6 +434,7 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         negatives,
         max,
         flat,
+        units,
     };
 
     let (low, high) = if use_answer {
@@ -385,61 +452,37 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         ((max + 1) / 2, max)
     };
 
-    let (answer, expression) = if low == high {
-        let Some(expression) = expr::generate(&config(low), &mut rng, tokens) else {
-            return false;
-        };
-        (low, expression)
+    // A factor of 1 is the last resort: tasks without one are looked for
+    // among every answer on offer first, and the others only when there are
+    // none. Without `*` the question does not arise.
+    let found = if ops.has(Op::Mul) {
+        grow_for_some_answer(
+            (low, high),
+            |answer| config(answer, false),
+            WITHOUT_UNITS_RESTARTS,
+            &mut rng,
+            tokens,
+        )
+        .or_else(|| {
+            grow_for_some_answer(
+                (low, high),
+                |answer| config(answer, true),
+                expr::RESTARTS,
+                &mut rng,
+                tokens,
+            )
+        })
     } else {
-        // An answer the rules cannot build, such as 20 for `-` alone within
-        // 20 without negatives, is set aside and another drawn from those
-        // left, so the request is refused only when none of them can be
-        // built. Each draw is uniform over what is left, which makes the
-        // answer uniform over the ones that can be, and the first takes the
-        // same number from the generator as `rng.range(low, high)`.
-        //
-        // A range of more than `ANSWER_TRIES` answers is not walked through:
-        // that many are drawn from it, and the request is refused when none
-        // of them can be built, which for a range where hardly any answer
-        // can is the better answer than a wait.
-        //
-        // An answer that runs short of room is grown again up to
-        // `RESTARTS` times, which for 32 terms of `-` without brackets or
-        // negatives takes a couple of milliseconds before it gives up. Its
-        // neighbours mostly
-        // run short too, so the ones drawn after it get an eighth of that,
-        // or a refusal would take eleven times as long.
-        let span = (high - low + 1) as u64;
-        let walked = span <= ANSWER_TRIES as u64;
-        let mut candidates = [0; ANSWER_TRIES];
-        let mut left = if walked { span as usize } else { ANSWER_TRIES };
-        if walked {
-            for (slot, answer) in candidates[..left].iter_mut().zip(low..=high) {
-                *slot = answer;
-            }
-        }
-        let mut restarts = expr::RESTARTS;
-        loop {
-            if left == 0 {
-                return false;
-            }
-            let at = rng.below(if walked { left as u64 } else { span }) as usize;
-            let answer = if walked {
-                candidates[at]
-            } else {
-                low + at as i64
-            };
-            if let Some(expression) =
-                expr::generate_with(&config(answer), &mut rng, tokens, restarts)
-            {
-                break (answer, expression);
-            }
-            left -= 1;
-            if walked {
-                candidates.swap(at, left);
-            }
-            restarts = expr::RESTARTS / 8;
-        }
+        grow_for_some_answer(
+            (low, high),
+            |answer| config(answer, true),
+            expr::RESTARTS,
+            &mut rng,
+            tokens,
+        )
+    };
+    let Some((answer, expression)) = found else {
+        return false;
     };
 
     // The tree is built so that this holds whatever shape it takes, and the
@@ -793,6 +836,67 @@ mod tests {
         assert!(decode(&data).answer >= 14);
         // And every one of 31 answers is below 32 terms.
         assert!(generate_in(32, 0.0, 30.0, ADD | NO_NEGATIVES, MAX, 1.0).is_empty());
+    }
+
+    /// Whether a task has a factor of 1 or -1 in it.
+    fn has_unit_factor(task: &str) -> bool {
+        task.split(['+', '-', '/', '(', ')'])
+            .any(|piece| piece.split('*').count() > 1 && piece.split('*').any(|f| f == "1"))
+            || task.contains("(-1)*")
+            || task.contains("*(-1)")
+    }
+
+    #[test]
+    fn with_star_alone_the_answers_that_need_no_factor_of_one_are_the_ones_drawn() {
+        const MUL: u32 = 1 << 2;
+        // (length, the default answers, 10 to 20, that can have that many
+        // prime factors, and so no 1)
+        for (length, expected) in [
+            (2, vec![10, 12, 14, 15, 16, 18, 20]),
+            (3, vec![12, 16, 18, 20]),
+            (4, vec![16]),
+        ] {
+            let mut drawn = std::collections::BTreeSet::new();
+            for seed in 0..600 {
+                let data = generate(length, 0.0, false, false, false, MUL, MAX, seed as f64);
+                let decoded = decode(&data);
+                assert!(!has_unit_factor(&decoded.task), "{}", decoded.task);
+                drawn.insert(decoded.answer);
+            }
+            assert_eq!(
+                drawn.into_iter().collect::<Vec<_>>(),
+                expected,
+                "length {length}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_factor_of_one_is_still_there_when_nothing_else_can_make_the_task() {
+        const MUL: u32 = 1 << 2;
+        // Five numbers need five prime factors, and nothing from 10 to 20
+        // has them; 13 is a prime and is only ever 1*13.
+        for seed in 0..50 {
+            let data = generate(5, 0.0, false, false, false, MUL, MAX, seed as f64);
+            assert!(has_unit_factor(&decode(&data).task));
+            let data = generate(2, 13.0, true, false, false, MUL, MAX, seed as f64);
+            assert!(has_unit_factor(&decode(&data).task));
+        }
+        // But among 11 to 14 the primes are set aside while 12 and 14 stay.
+        for seed in 0..200 {
+            let data = generate_in(2, 11.0, 14.0, MUL, MAX, seed as f64);
+            let decoded = decode(&data);
+            assert!([12, 14].contains(&decoded.answer), "{}", decoded.task);
+            assert!(!has_unit_factor(&decoded.task));
+        }
+    }
+
+    #[test]
+    fn with_other_operators_beside_it_no_prime_answer_becomes_a_product_with_one() {
+        for seed in 0..500 {
+            let data = generate(3, 13.0, true, false, false, ALL, MAX, seed as f64);
+            assert!(!has_unit_factor(&decode(&data).task));
+        }
     }
 
     #[test]

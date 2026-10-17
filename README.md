@@ -131,11 +131,16 @@ be:
   brackets that it builds with them.
 
 A prime, or a 1, is only a product as `1 * p`, which is no multiplication
-exercise, so `*` is the last thing tried for them: no task has a factor of 1
-unless the operators leave nothing else to split with, as with `*` alone,
-where a prime answer can only become `1 * p` and you should expect plenty of
-ones. By default about one task in three of length 3 contains a negative
-number, and one in two of length 5.
+exercise, so a factor of 1 is a last resort. Wherever `+`, `-` or `/` can
+split the number instead they do, and with `*` alone an answer that cannot be
+built without a 1 is set aside while any other is on offer: two numbers draw
+their answer from the products among 10 to 20 (10, 12, 14, 15, 16, 18, 20),
+three from those with three prime factors (12, 16, 18, 20) and four from 16
+alone. Ones come only when nothing else is left, as for five numbers or an
+`answer` of 13, and then you should expect plenty of them.
+
+By default about one task in three of length 3 contains a negative number, and
+one in two of length 5.
 
 ```js
 // adding and taking away within twenty, nothing below zero, no brackets
