@@ -115,14 +115,22 @@ impl Ops {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Expr {
+/// One node of the tree: a number, or an operator over two other nodes,
+/// named by their position in `Expr::nodes`.
+#[derive(Clone, Copy, Debug)]
+enum Node {
     Num(i64),
-    Binary {
-        op: Op,
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
+    Binary { op: Op, left: u8, right: u8 },
+}
+
+/// A task as a tree, kept in one vector rather than boxed node by node: a
+/// task of 8 numbers is 15 nodes, and allocating and freeing each of them
+/// separately cost more than any other step of building it. Tasks have 32
+/// numbers at the most, so 63 nodes, which an index of a byte reaches.
+#[derive(Clone, Debug)]
+pub struct Expr {
+    nodes: Vec<Node>,
+    root: u8,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -140,71 +148,121 @@ enum Visit {
 }
 
 impl Expr {
-    /// The value this subtree evaluates to. Exact by construction.
+    /// A tree of one number, with room for a task of `leaves` numbers.
+    fn leaf(value: i64, leaves: usize) -> Expr {
+        let mut nodes = Vec::with_capacity(2 * leaves - 1);
+        nodes.push(Node::Num(value));
+        Expr { nodes, root: 0 }
+    }
+
+    #[cfg(test)]
+    pub fn num(value: i64) -> Expr {
+        Expr::leaf(value, 1)
+    }
+
+    /// `left op right`, with both trees copied in.
+    #[cfg(test)]
+    pub fn binary(op: Op, left: &Expr, right: &Expr) -> Expr {
+        let mut nodes = left.nodes.clone();
+        let shift = nodes.len() as u8;
+        let left_root = left.root;
+        nodes.extend(right.nodes.iter().map(|node| match *node {
+            Node::Num(n) => Node::Num(n),
+            Node::Binary { op, left, right } => Node::Binary {
+                op,
+                left: left + shift,
+                right: right + shift,
+            },
+        }));
+        let right_root = right.root + shift;
+        nodes.push(Node::Binary {
+            op,
+            left: left_root,
+            right: right_root,
+        });
+        let root = (nodes.len() - 1) as u8;
+        Expr { nodes, root }
+    }
+
+    fn push(&mut self, node: Node) -> u8 {
+        self.nodes.push(node);
+        (self.nodes.len() - 1) as u8
+    }
+
+    /// The value this tree evaluates to. Exact by construction.
     pub fn value(&self) -> i64 {
-        match self {
-            Expr::Num(n) => *n,
-            Expr::Binary { op, left, right } => op.apply(left.value(), right.value()),
+        self.value_of(self.root)
+    }
+
+    fn value_of(&self, at: u8) -> i64 {
+        match self.nodes[at as usize] {
+            Node::Num(n) => n,
+            Node::Binary { op, left, right } => op.apply(self.value_of(left), self.value_of(right)),
         }
     }
 
     #[cfg(test)]
     pub fn leaf_count(&self) -> usize {
-        match self {
-            Expr::Num(_) => 1,
-            Expr::Binary { left, right, .. } => left.leaf_count() + right.leaf_count(),
+        self.leaves_of(self.root)
+    }
+
+    #[cfg(test)]
+    fn leaves_of(&self, at: u8) -> usize {
+        match self.nodes[at as usize] {
+            Node::Num(_) => 1,
+            Node::Binary { left, right, .. } => self.leaves_of(left) + self.leaves_of(right),
         }
     }
 
-    fn precedence(&self) -> u8 {
-        match self {
+    fn precedence_of(&self, at: u8) -> u8 {
+        match self.nodes[at as usize] {
             // A leaf binds tighter than any operator, so a parent never has
             // to wrap it. A negative leaf carries its own brackets instead,
             // because `a - -5` is `a--5`, which does not even parse.
-            Expr::Num(_) => 3,
-            Expr::Binary { op, .. } => op.precedence(),
+            Node::Num(_) => 3,
+            Node::Binary { op, .. } => op.precedence(),
         }
     }
 
-    /// `room` is the operators this subtree may be split by where it stands,
-    /// which is all of them unless the task is to have no brackets.
+    /// `room` is the operators the subtree at `at` may be split by where it
+    /// stands, which is all of them unless the task is to have no brackets.
     fn split_nth_leaf(
         &mut self,
+        at: u8,
         index: &mut usize,
         room: Ops,
         config: &Config,
         rng: &mut Rng,
     ) -> Visit {
-        match self {
-            Expr::Num(value) => {
-                let current = *value;
+        match self.nodes[at as usize] {
+            Node::Num(current) => {
                 if *index > 0 {
                     *index -= 1;
                     return Visit::Missed;
                 }
                 match split_value(current, config.ops.and(room), config, rng) {
                     Some((left, op, right)) => {
-                        *self = Expr::Binary {
-                            op,
-                            left: Box::new(Expr::Num(left)),
-                            right: Box::new(Expr::Num(right)),
-                        };
+                        let left = self.push(Node::Num(left));
+                        let right = self.push(Node::Num(right));
+                        self.nodes[at as usize] = Node::Binary { op, left, right };
                         Visit::Split
                     }
                     None => Visit::Failed,
                 }
             }
-            Expr::Binary { op, left, right } => {
+            Node::Binary { op, left, right } => {
                 let (left_room, right_room) = if config.flat {
                     let (left, right) = op.flat_operands();
                     (room.and(left), room.and(right))
                 } else {
                     (room, room)
                 };
-                let right_was_leaf = matches!(**right, Expr::Num(_));
-                match left.split_nth_leaf(index, left_room, config, rng) {
-                    Visit::Missed => match right.split_nth_leaf(index, right_room, config, rng) {
-                        Visit::Split if config.flat && right_was_leaf => self.lean_left(config),
+                let right_was_leaf = matches!(self.nodes[right as usize], Node::Num(_));
+                match self.split_nth_leaf(left, index, left_room, config, rng) {
+                    Visit::Missed => match self
+                        .split_nth_leaf(right, index, right_room, config, rng)
+                    {
+                        Visit::Split if config.flat && right_was_leaf => self.lean_left(at, config),
                         reached => reached,
                     },
                     reached => reached,
@@ -218,33 +276,43 @@ impl Expr {
     /// and `l+a`, a step a pupil takes on the way, becomes a node of the
     /// tree, which has to be within bounds: where it is not, the split is
     /// undone. Left as it was, only brackets could keep that step in bounds.
-    fn lean_left(&mut self, config: &Config) -> Visit {
-        let Expr::Binary { op, left, right } = self else {
+    ///
+    /// The right operand of `at` is the leaf that was just split, so its two
+    /// new leaves are the last two nodes of the vector.
+    fn lean_left(&mut self, at: u8, config: &Config) -> Visit {
+        let Node::Binary { op, left, right } = self.nodes[at as usize] else {
             return Visit::Split;
         };
-        let Expr::Binary {
+        let Node::Binary {
             op: inner,
             left: first,
             right: second,
-        } = &mut **right
+        } = self.nodes[right as usize]
         else {
             return Visit::Split;
         };
         if inner.precedence() != op.precedence() {
             return Visit::Split;
         }
-        let step = op.apply(left.value(), first.value());
+        let step = op.apply(self.value_of(left), self.value_of(first));
         let low = if config.negatives { -config.max } else { 0 };
         if step < low || step > config.max {
-            let value = inner.apply(first.value(), second.value());
-            **right = Expr::Num(value);
+            let value = inner.apply(self.value_of(first), self.value_of(second));
+            self.nodes[right as usize] = Node::Num(value);
+            self.nodes.truncate(self.nodes.len() - 2);
             return Visit::Failed;
         }
         // In place: the node that held `a-b` takes `l+a`, and `b` moves up.
-        std::mem::swap(op, inner);
-        std::mem::swap(first, second);
-        std::mem::swap(left, first);
-        std::mem::swap(left, right);
+        self.nodes[right as usize] = Node::Binary {
+            op,
+            left,
+            right: first,
+        };
+        self.nodes[at as usize] = Node::Binary {
+            op: inner,
+            left: right,
+            right: second,
+        };
         Visit::Split
     }
 
@@ -259,11 +327,11 @@ impl Expr {
     /// part that would take a step of working it out below `low` or above
     /// `high`.
     pub fn write(&self, out: &mut Vec<Token>, low: i64, high: i64) {
-        self.write_steps(out, low, high);
+        self.write_steps(self.root, out, low, high);
     }
 
-    /// Writes this subtree and returns its value, with the lowest and the
-    /// highest value a pupil meets working out its chain of operators of
+    /// Writes the subtree at `at` and returns its value, with the lowest and
+    /// the highest value a pupil meets working out its chain of operators of
     /// one precedence from left to right: the first number and every
     /// running result after it.
     ///
@@ -272,40 +340,41 @@ impl Expr {
     /// different: `a+(b-c)` is written `a+b-c` and passes through `a+b`,
     /// and `a*(b/c)` passes through `a*b`, neither of them a node. Such an
     /// operand keeps its brackets when one of those steps is out of bounds.
-    fn write_steps(&self, out: &mut Vec<Token>, low: i64, high: i64) -> (i64, i64, i64) {
-        let (op, left, right) = match self {
-            Expr::Num(n) => {
-                if *n < 0 {
+    fn write_steps(&self, at: u8, out: &mut Vec<Token>, low: i64, high: i64) -> (i64, i64, i64) {
+        let (op, left, right) = match self.nodes[at as usize] {
+            Node::Num(n) => {
+                if n < 0 {
                     out.push(Token::Open);
-                    out.push(Token::Num(*n));
+                    out.push(Token::Num(n));
                     out.push(Token::Close);
                 } else {
-                    out.push(Token::Num(*n));
+                    out.push(Token::Num(n));
                 }
-                return (*n, *n, *n);
+                return (n, n, n);
             }
-            Expr::Binary { op, left, right } => (*op, left, right),
+            Node::Binary { op, left, right } => (op, left, right),
         };
         let precedence = op.precedence();
 
-        let open_left = left.precedence() < precedence;
+        let left_precedence = self.precedence_of(left);
+        let open_left = left_precedence < precedence;
         if open_left {
             out.push(Token::Open);
         }
-        let (l, mut lowest, mut highest) = left.write_steps(out, low, high);
+        let (l, mut lowest, mut highest) = self.write_steps(left, out, low, high);
         if open_left {
             out.push(Token::Close);
         }
-        if left.precedence() != precedence {
+        if left_precedence != precedence {
             // Worked out on its own: only its value carries on.
             (lowest, highest) = (l, l);
         }
 
         out.push(Token::Op(op));
 
-        let right_precedence = right.precedence();
+        let right_precedence = self.precedence_of(right);
         let start = out.len();
-        let (r, right_lowest, right_highest) = right.write_steps(out, low, high);
+        let (r, right_lowest, right_highest) = self.write_steps(right, out, low, high);
         let mut grouped = right_precedence < precedence
             || (right_precedence == precedence
                 && op.right_operand_needs_brackets_at_equal_precedence());
@@ -546,14 +615,14 @@ pub const RESTARTS: usize = 64;
 /// Grows a tree towards `wanted` leaves for the answer, and says how many
 /// it reached: fewer when it got stuck.
 fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
-    let mut expr = Expr::Num(config.answer);
+    let mut expr = Expr::leaf(config.answer, wanted);
     // Counted as it grows rather than walked for on every step.
     let mut leaves = 1;
     let mut guard = 0;
     while leaves < wanted && guard < wanted * 64 {
         guard += 1;
         let mut index = rng.below(leaves as u64) as usize;
-        if let Visit::Split = expr.split_nth_leaf(&mut index, Ops::ALL, config, rng) {
+        if let Visit::Split = expr.split_nth_leaf(expr.root, &mut index, Ops::ALL, config, rng) {
             leaves += 1;
         }
     }
@@ -1356,57 +1425,31 @@ mod tests {
 
     #[test]
     fn brackets_go_where_precedence_needs_them() {
-        let sum = Expr::Binary {
-            op: Op::Add,
-            left: Box::new(Expr::Num(2)),
-            right: Box::new(Expr::Num(3)),
-        };
-        let product = Expr::Binary {
-            op: Op::Mul,
-            left: Box::new(sum.clone()),
-            right: Box::new(Expr::Num(4)),
-        };
+        let sum = Expr::binary(Op::Add, &Expr::num(2), &Expr::num(3));
+        let product = Expr::binary(Op::Mul, &sum, &Expr::num(4));
         assert_eq!(render(&product.tokens()), "(2+3)*4");
 
-        let difference = Expr::Binary {
-            op: Op::Sub,
-            left: Box::new(Expr::Num(10)),
-            right: Box::new(sum.clone()),
-        };
+        let difference = Expr::binary(Op::Sub, &Expr::num(10), &sum);
         assert_eq!(render(&difference.tokens()), "10-(2+3)");
 
         // a + (b - c) does not need them
-        let flat = Expr::Binary {
-            op: Op::Add,
-            left: Box::new(Expr::Num(10)),
-            right: Box::new(Expr::Binary {
-                op: Op::Sub,
-                left: Box::new(Expr::Num(3)),
-                right: Box::new(Expr::Num(1)),
-            }),
-        };
+        let flat = Expr::binary(
+            Op::Add,
+            &Expr::num(10),
+            &Expr::binary(Op::Sub, &Expr::num(3), &Expr::num(1)),
+        );
         assert_eq!(render(&flat.tokens()), "10+3-1");
 
         // a * (b / c) is written flat while a * b stays in bounds
-        let quotient = |numerator| Expr::Binary {
-            op: Op::Div,
-            left: Box::new(Expr::Num(numerator)),
-            right: Box::new(Expr::Num(10)),
-        };
-        let product = |numerator| Expr::Binary {
-            op: Op::Mul,
-            left: Box::new(Expr::Num(2)),
-            right: Box::new(quotient(numerator)),
+        let product = |numerator| {
+            let quotient = Expr::binary(Op::Div, &Expr::num(numerator), &Expr::num(10));
+            Expr::binary(Op::Mul, &Expr::num(2), &quotient)
         };
         assert_eq!(render(&product(50).tokens()), "2*50/10");
         assert_eq!(render(&product(5600).tokens()), "2*(5600/10)");
 
         // a negative leaf brings its own, or "7--5" would not parse
-        let negative = Expr::Binary {
-            op: Op::Sub,
-            left: Box::new(Expr::Num(7)),
-            right: Box::new(Expr::Num(-5)),
-        };
+        let negative = Expr::binary(Op::Sub, &Expr::num(7), &Expr::num(-5));
         assert_eq!(render(&negative.tokens()), "7-(-5)");
     }
 }
