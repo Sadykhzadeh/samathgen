@@ -539,8 +539,9 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
         }
     };
 
-    // A handful of attempts: the bounds reject some draws, and another draw
-    // is cheaper than reasoning about which ones.
+    // A handful of attempts. The size of each draw is fitted to the bounds
+    // beforehand, so what is left to reject is a sign that leaves no room
+    // and the odd draw that comes out as 0.
     for _ in 0..16 {
         let candidate = match op {
             Op::Add => {
@@ -551,11 +552,35 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
                 } else {
                     OFFSET_MAX
                 };
-                let right = rng.range(1, reach.max(1)) * toward_value * flip(rng);
+                let sign = flip(rng);
+                // Against the value's own sign the left operand is the
+                // value and the right added, and has to stay within max.
+                let room = if sign < 0 {
+                    config.max - value.abs()
+                } else {
+                    config.max
+                };
+                let most = reach.min(config.max).min(room);
+                if most < 1 {
+                    continue;
+                }
+                let right = rng.range(1, most) * toward_value * sign;
                 (value - right, Op::Add, right)
             }
             Op::Sub => {
-                let right = rng.range(1, OFFSET_MAX) * toward_value * flip(rng);
+                let sign = flip(rng);
+                // Going the value's own way the left operand is the value
+                // and the right added.
+                let room = if sign > 0 {
+                    config.max - value.abs()
+                } else {
+                    config.max
+                };
+                let most = OFFSET_MAX.min(config.max).min(room);
+                if most < 1 {
+                    continue;
+                }
+                let right = rng.range(1, most) * toward_value * sign;
                 (value + right, Op::Sub, right)
             }
             Op::Mul => {
@@ -568,9 +593,13 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
                 (left, Op::Mul, value / left)
             }
             Op::Div => {
-                let right = rng.range(DIVISOR_MIN, DIVISOR_MAX) * flip(rng);
-                let left = value.checked_mul(right)?;
-                (left, Op::Div, right)
+                // The left operand is the value times the right.
+                let most = DIVISOR_MAX.min(config.max / value.abs().max(1));
+                if most < DIVISOR_MIN {
+                    return None;
+                }
+                let right = rng.range(DIVISOR_MIN, most) * flip(rng);
+                (value * right, Op::Div, right)
             }
         };
 
@@ -589,6 +618,7 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
     None
 }
 
+#[derive(Debug)]
 pub struct Config {
     pub answer: i64,
     pub length: usize,
@@ -1403,6 +1433,38 @@ mod tests {
                 if let Token::Num(0) = token {
                     panic!("a zero leaf appeared in {}", render(&expr.tokens()));
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn a_split_that_fits_the_bounds_is_found_every_time() {
+        // Drawing an operand past the bounds and drawing again gave up after
+        // sixteen tries, which left `-` 3 times in 100 with no way to split
+        // 17 within 20, and `1*17` in its place.
+        let config = |max| Config {
+            answer: 0,
+            length: 2,
+            brackets: false,
+            ops: Ops::ALL,
+            negatives: true,
+            max,
+            flat: false,
+        };
+        for seed in 0..5000 {
+            let mut rng = Rng::new(seed);
+            for (value, op, max) in [
+                (17, Op::Sub, 20),
+                (-17, Op::Sub, 20),
+                (19, Op::Add, 20),
+                (14, Op::Div, 100),
+                (2, Op::Sub, 10),
+                (10, Op::Add, 10),
+            ] {
+                let (left, _, right) = try_split(value, op, &config(max), &mut rng)
+                    .unwrap_or_else(|| panic!("{value} by {op:?} within {max}, seed {seed}"));
+                assert_eq!(op.apply(left, right), value);
+                assert!(left.abs() <= max && right.abs() <= max);
             }
         }
     }
