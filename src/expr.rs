@@ -643,18 +643,28 @@ pub struct Config {
 /// about one chance in 10^16 of refusing a request that can be built.
 pub const RESTARTS: usize = 64;
 
+/// How many leaves in a row, for each leaf there is, may refuse to be split
+/// before the tree is taken to be stuck: the chance that one that can be
+/// split was missed every time is under one in ten million.
+const MISSES_PER_LEAF: usize = 16;
+
 /// Grows a tree towards `wanted` leaves for the answer, and says how many
 /// it reached: fewer when it got stuck.
 fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     let mut expr = Expr::leaf(config.answer, wanted);
     // Counted as it grows rather than walked for on every step.
     let mut leaves = 1;
-    let mut guard = 0;
-    while leaves < wanted && guard < wanted * 64 {
-        guard += 1;
+    // A leaf is picked at random, so a tree where none can be split is only
+    // known to be stuck after enough misses in a row for every leaf to have
+    // been tried many times over, and each miss costs a draw.
+    let mut misses = 0;
+    while leaves < wanted && misses < leaves * MISSES_PER_LEAF {
         let mut index = rng.below(leaves as u64) as usize;
         if let Visit::Split = expr.split_nth_leaf(expr.root, &mut index, Ops::ALL, config, rng) {
             leaves += 1;
+            misses = 0;
+        } else {
+            misses += 1;
         }
     }
     (expr, leaves)
