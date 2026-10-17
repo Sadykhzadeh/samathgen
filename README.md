@@ -162,6 +162,14 @@ the way it is read, from left to right, and every step of working it out is
 within `max`. A negative number still comes in its own brackets, as in
 `7-(-5)`, unless `negatives` is `false`.
 
+`brackets: true` is a request rather than a promise. With `+` alone or `*`
+alone no grouping changes the value, so a group is not looked for, and a
+task only has one where it keeps a step within `max`. Otherwise the task is
+drawn again until it has a group, and comes without one after 24 tries. That
+is rare except for three numbers of `+` and `/` under a small `max`: within
+20, `(a+b)/c` and `a/(b+c)` make at most 10, so 60% of such tasks have no
+group, and 92% without negatives.
+
 ### `mathGenBatch(count, length, more?)`
 
 Builds `count` tasks in one call, for a worksheet or a whole quiz. It takes the
