@@ -51,7 +51,8 @@ fn code(token: Token) -> i32 {
 /// step of working it out and every option within that far of zero.
 ///
 /// An empty array means those rules cannot build a task of that length for
-/// that answer; see `expr::generate`.
+/// that answer, or without `use_answer` for any answer it would draw; see
+/// `expr::generate`.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn generate(
@@ -155,33 +156,67 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
         "max out of range"
     );
     let mut rng = Rng::new(seed);
+    let config = |answer| Config {
+        answer,
+        length: length as usize,
+        brackets,
+        ops,
+        negatives,
+        max,
+        flat,
+    };
 
-    let answer = if use_answer {
+    let (answer, expression) = if use_answer {
         // The wrappers have already turned away anything past max, where no
         // split fits and an f64 past i64 would saturate and then wrap.
         let answer = answer.round() as i64;
         assert!(answer.abs() <= max, "answer out of range");
-        answer
-    } else if max >= DEFAULT_ANSWER_HIGH {
-        rng.range(DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
+        let Some(expression) = expr::generate(&config(answer), &mut rng, tokens) else {
+            return false;
+        };
+        (answer, expression)
     } else {
-        rng.range((max + 1) / 2, max)
-    };
-
-    let Some(expression) = expr::generate(
-        &Config {
-            answer,
-            length: length as usize,
-            brackets,
-            ops,
-            negatives,
-            max,
-            flat,
-        },
-        &mut rng,
-        tokens,
-    ) else {
-        return false;
+        // An answer the rules cannot build, such as 20 for `-` alone within
+        // 20 without negatives, is set aside and another drawn from those
+        // left, so the request is refused only when none of them can be
+        // built. Each draw is uniform over what is left, which makes the
+        // answer uniform over the ones that can be, and the first takes the
+        // same number from the generator as `rng.range(low, high)`.
+        //
+        // An answer that runs short of room is grown again up to
+        // `RESTARTS` times, which for 32 terms of `-` without brackets or
+        // negatives takes 50 ms before it gives up. Its neighbours mostly
+        // run short too, so the ones drawn after it get an eighth of that,
+        // or a refusal would take eleven times as long.
+        let (low, high) = if max >= DEFAULT_ANSWER_HIGH {
+            (DEFAULT_ANSWER_LOW, DEFAULT_ANSWER_HIGH)
+        } else {
+            ((max + 1) / 2, max)
+        };
+        let mut answers = [0; (DEFAULT_ANSWER_HIGH - DEFAULT_ANSWER_LOW + 1) as usize];
+        let mut left = (high - low + 1) as usize;
+        for (slot, answer) in answers[..left].iter_mut().zip(low..=high) {
+            *slot = answer;
+        }
+        loop {
+            if left == 0 {
+                return false;
+            }
+            let restarts = if left == (high - low + 1) as usize {
+                expr::RESTARTS
+            } else {
+                expr::RESTARTS / 8
+            };
+            let at = rng.below(left as u64) as usize;
+            let answer = answers[at];
+            if let Some(expression) =
+                expr::generate_with(&config(answer), &mut rng, tokens, restarts)
+            {
+                break (answer, expression);
+            }
+            left -= 1;
+            answers.swap(at, left);
+        }
     };
 
     // The tree is built so that this holds whatever shape it takes, and the
@@ -348,6 +383,49 @@ mod tests {
             let expected: std::collections::BTreeSet<i32> = (low as i32..=high as i32).collect();
             assert_eq!(drawn, expected, "answers drawn under max {max}");
         }
+    }
+
+    #[test]
+    fn without_an_answer_one_that_can_be_built_is_drawn() {
+        // Without negatives, `-` alone cannot make 20 within 20, `/` alone
+        // nothing past 10 within 20, and `+` alone of 14 terms nothing
+        // below 14.
+        const ADD: u32 = 1;
+        const SUB: u32 = 1 << 1;
+        const DIV: u32 = 1 << 3;
+        for (length, ops, max, low, high) in [
+            (3, SUB, 20, 10, 19),
+            (3, DIV, 20, 10, 10),
+            (14, ADD, MAX, 14, 20),
+        ] {
+            let mut drawn = std::collections::BTreeMap::new();
+            for seed in 0..2000 {
+                let data = generate(
+                    length,
+                    0.0,
+                    false,
+                    false,
+                    false,
+                    ops | NO_NEGATIVES,
+                    max,
+                    seed as f64,
+                );
+                assert!(!data.is_empty(), "refused seed {seed} for {ops:04b}");
+                *drawn.entry(decode(&data).answer).or_insert(0u32) += 1;
+            }
+            let answers: Vec<i32> = drawn.keys().copied().collect();
+            assert_eq!(answers, (low..=high).collect::<Vec<i32>>(), "{ops:04b}");
+            let expected = 2000 / (high - low + 1) as u32;
+            for (answer, count) in drawn {
+                assert!(
+                    count.abs_diff(expected) < expected / 4,
+                    "{answer} drawn {count} times for {ops:04b}"
+                );
+            }
+        }
+        // `/` alone without brackets cannot make any of them in 8 terms
+        // within 100: the first number would be the answer times 2^7.
+        assert!(generate(8, 0.0, false, false, false, DIV | FLAT, 100, 1.0).is_empty());
     }
 
     #[test]

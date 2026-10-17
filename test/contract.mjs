@@ -377,7 +377,7 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
     assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)
     assert.throws(() => mathGen(5, { answer: 3, negatives: false, operators: ['+'] }), /5 terms evaluating to 3/)
-    assert.throws(() => mathGenBatch(2, 20, { negatives: false, operators: ['+'] }), /an answer from 10 to 20/)
+    assert.throws(() => mathGenBatch(2, 21, { negatives: false, operators: ['+'] }), /21 terms evaluating to an answer from 10 to 20/)
     assert.equal(mathGen(5, { answer: 5, negatives: false, operators: ['+'], seed: 2 }).task.join(''), '1+1+1+1+1')
   })
 
@@ -439,6 +439,19 @@ const suite = (mathGen, mathGenBatch) => {
       const drawn = new Set(mathGenBatch(500, 3, { max, seed: 1 }).map((task) => task.answer))
       assert.deepEqual([...drawn].sort((a, b) => a - b), Array.from({ length: high - low + 1 }, (_, i) => low + i), `max ${max}`)
     }
+  })
+
+  check('without an answer, one the other options can build is drawn', () => {
+    // Taking away within twenty without negatives cannot make 20, and a
+    // worksheet of twenty tasks drawing from 10 to 20 all but surely meets it.
+    const more = { operators: ['-'], negatives: false, max: 20 }
+    const drawn = new Set(mathGenBatch(500, 3, { ...more, seed: 1 }).map((task) => task.answer))
+    assert.deepEqual([...drawn].sort((a, b) => a - b), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+    for (let seed = 0; seed < 300; seed++) {
+      assert.equal(mathGen(3, { operators: ['/'], max: 20, seed }).answer, 10)
+      assert.ok(mathGen(14, { operators: ['+'], negatives: false, seed }).answer >= 14)
+    }
+    assert.throws(() => mathGen(3, { operators: ['/'], max: 19 }), /an answer from 10 to 19 can be built from \/ within 19$/)
   })
 
   check('a max it cannot honour is refused', () => {

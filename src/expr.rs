@@ -541,7 +541,7 @@ pub struct Config {
 /// 8 can be split again. One in two trees for that request ends there. Such
 /// a tree is grown again from the start, up to this many times, which leaves
 /// about one chance in 10^16 of refusing a request that can be built.
-const RESTARTS: usize = 64;
+pub const RESTARTS: usize = 64;
 
 /// Grows a tree towards `wanted` leaves for the answer, and says how many
 /// it reached: fewer when it got stuck.
@@ -579,6 +579,17 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
 /// past a few terms it cannot be built. `-` with `/`, and `+` with `/`
 /// without negatives, run short of room too, sooner under a small max.
 pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Option<Expr> {
+    generate_with(config, rng, tokens, RESTARTS)
+}
+
+/// `generate`, growing a cornered tree again up to `restarts` times rather
+/// than `RESTARTS`.
+pub fn generate_with(
+    config: &Config,
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+    restarts: usize,
+) -> Option<Expr> {
     let wanted = config.length.clamp(2, 32);
     if !config.negatives && config.answer < 0 {
         return None;
@@ -620,15 +631,15 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
     let low = if config.negatives { -config.max } else { 0 };
 
     for _ in 0..attempts {
-        let mut restarts = 0;
+        let mut grown_again = 0;
         let expr = loop {
             match grow(config, wanted, rng) {
                 (expr, leaves) if leaves == wanted => break expr,
                 // An answer that cannot be split at all will not be the
                 // next time either.
                 (_, 1) => return None,
-                _ if restarts == RESTARTS => return None,
-                _ => restarts += 1,
+                _ if grown_again == restarts => return None,
+                _ => grown_again += 1,
             }
         };
         tokens.clear();

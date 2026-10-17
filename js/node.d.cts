@@ -11,7 +11,8 @@ export interface MathGenOptions {
   /** The value the task must evaluate to: a whole number from -max to max,
    *  0 included. Anything else throws a RangeError (or a TypeError for a
    *  value that is not a number). Default: a random integer in 10..=20, or
-   *  from half of max up to max when max is below 20. */
+   *  from half of max up to max when max is below 20, among those the other
+   *  options can build; only when none of them can is a RangeError thrown. */
   answer?: number
   /** Ask for a task that groups part of itself in brackets, as in
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
