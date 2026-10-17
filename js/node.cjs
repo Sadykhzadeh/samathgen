@@ -101,11 +101,21 @@ const readOperators = (operators) => {
   return bits
 }
 
+// Only `brackets: 'never'` rules out a group. Any other string, such as
+// 'Never' or a 'false' read from a query string, would quietly leave
+// brackets in, so it is refused.
+const readBrackets = (brackets) => {
+  if (typeof brackets === 'string' && brackets !== 'never') {
+    throw new RangeError(`brackets must be true, false or 'never', got ${JSON.stringify(brackets)}`)
+  }
+  return brackets === 'never' ? FLAT : 0
+}
+
 // What may appear in the task, as the one integer the WebAssembly takes.
 // Only an explicit `negatives: false` rules them out, like the other flags,
 // and only `brackets: 'never'` rules out a group.
 const readAllowed = (options, answer) => {
-  const allowed = readOperators(options.operators) | (options.brackets === 'never' ? FLAT : 0)
+  const allowed = readOperators(options.operators) | readBrackets(options.brackets)
   if (options.negatives !== false) return allowed
   if (answer < 0) {
     throw new RangeError(`answer ${answer} is negative, but negatives is false`)

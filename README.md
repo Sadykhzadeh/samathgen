@@ -90,7 +90,7 @@ is not a number at all is a `TypeError`.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `answer` | a random integer in `10..=20`, or from half of `max` up to `max` when that is below `20`, among those the other options can build | The value the task must evaluate to, a whole number from `-max` to `max`. `0` is honoured. |
-| `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. Set to `'never'` for a task that groups nothing, for a class that has not met brackets yet. |
+| `brackets` | `false` | Ask for a task that groups part of itself in brackets, as in `(2+3)*4`. The brackets around a negative number, as in `7-(-5)`, do not count, and a task of two numbers has no room for a group. Set to `'never'` for a task that groups nothing, for a class that has not met brackets yet; any other string is a `RangeError`. |
 | `quizMode` | `false` | Fill `quizOptions` with the answer and three near misses, each within `5` of it. |
 | `operators` | `['+', '-', '*', '/']` | The operators the task may use, for example `['+', '-']` for a class that has not met multiplication yet. |
 | `negatives` | `true` | Set to `false` to keep every number, every quiz option and every step of working the task out left to right at `0` or above. |
