@@ -53,6 +53,7 @@ const clampLength = (length) => {
   if (length !== undefined && length !== null && typeof length !== 'number') {
     throw new TypeError(`length must be a number, got ${typeof length}`)
   }
+  if (length === Infinity) return LENGTH_MAX
   if (!Number.isFinite(length)) return LENGTH_MIN
   return Math.min(Math.max(Math.trunc(length), LENGTH_MIN), LENGTH_MAX)
 }

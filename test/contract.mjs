@@ -64,7 +64,7 @@ const suite = (mathGen, mathGenBatch) => {
   })
 
   check('length is clamped rather than trusted', () => {
-    for (const [given, expected] of [[0, 2], [1, 2], [-5, 2], [1000, 32], [NaN, 2], [undefined, 2]]) {
+    for (const [given, expected] of [[0, 2], [1, 2], [-5, 2], [1000, 32], [Infinity, 32], [-Infinity, 2], [NaN, 2], [undefined, 2]]) {
       const { task } = mathGen(given, { seed: 1 })
       const numbers = task.filter((token) => typeof token === 'number').length
       assert.equal(numbers, expected, `mathGen(${given}) produced ${numbers} terms`)
