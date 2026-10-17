@@ -39,8 +39,10 @@ jobs:
       - run: npm run build
       - name: the generated task has to evaluate to its answer, 200000 times
         run: npm run test:js
-      - name: the declarations have to parse
-        run: npx -y -p typescript tsc --noEmit --strict js/index.d.ts
+      - name: the declarations have to parse, with the DOM library and without
+        run: |
+          npx -y -p typescript tsc --noEmit --strict js/index.d.ts
+          npx -y -p typescript tsc --noEmit --strict --lib es2022 js/node.d.cts
       - name: the tarball has to carry both wasm builds
         run: |
           npm pack --pack-destination /tmp
