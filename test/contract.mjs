@@ -424,6 +424,33 @@ const suite = (mathGen, mathGenBatch) => {
     assert.ok(all.some((t) => typeof t === 'number' && t < 0), 'no negative number in 500 tasks')
   })
 
+  check('an option the library does not have is refused, with the nearest one named', () => {
+    for (const [wrong, near] of [
+      ['negative', 'negatives'],
+      ['quizmode', 'quizMode'],
+      ['operator', 'operators'],
+      ['bracket', 'brackets'],
+      ['sead', 'seed'],
+      ['maxx', 'max'],
+    ]) {
+      const message = new RegExp(`unknown option "${wrong}", did you mean ${near}\\? The options are `)
+      assert.throws(() => mathGen(4, { [wrong]: false }), message, wrong)
+      assert.throws(() => mathGenBatch(2, 4, { [wrong]: false }), message, wrong)
+    }
+    // Far from every option: no guess, but the list.
+    assert.throws(() => mathGen(4, { difficulty: 3 }), /unknown option "difficulty"\. The options are answer, brackets, distinct, max, negatives, operators, quizMode, seed\./)
+    // Every real option is let through, and `distinct` by a single task too.
+    const everything = { answer: 12, brackets: true, distinct: true, max: 100, negatives: true, operators: ['+', '-', '*', '/'], quizMode: true, seed: 3 }
+    assert.equal(mathGen(4, everything).answer, 12)
+    assert.equal(mathGenBatch(3, 4, everything).length, 3)
+    // Options are an object or nothing.
+    for (const more of ['negatives', 5, true, [], ['seed']]) {
+      assert.throws(() => mathGen(4, more), /options must be an object, got /, JSON.stringify(more))
+      assert.throws(() => mathGenBatch(2, 4, more), TypeError, JSON.stringify(more))
+    }
+    assert.equal(typeof mathGen(4, null).answer, 'number')
+  })
+
   check('a flag that is not true or false is refused instead of read as the default', () => {
     // A "false" from a query string or a 0 must not leave negative numbers
     // in for a class that asked to be spared them.

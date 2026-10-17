@@ -103,8 +103,10 @@ with a fraction is a `RangeError`, and a `length`, `answer`, `max` or `seed`
 that is not a number is a `TypeError`. So is a `brackets`, `negatives`,
 `quizMode` or `distinct` that is not `true` or `false` (or, for `brackets`,
 `'never'`): a `'false'` read from a query string would otherwise give a class
-that has not met negative numbers the tasks it asked to be spared. `null` and
-`undefined` mean the default.
+that has not met negative numbers the tasks it asked to be spared. So is an
+option the library does not have, with the nearest one named:
+`unknown option "negative", did you mean negatives?`. `null` and `undefined`
+mean the default.
 
 A few combinations cannot be built at all, and throw a `RangeError` rather
 than return a shorter task. Without an `answer`, one of the default range that

@@ -74,7 +74,8 @@ export interface MathGenResult {
  * Builds a task whose value is `answer`.
  *
  * `length` is the number of numbers in the task, clamped to 2..=32. A value
- * that is not a number throws a TypeError.
+ * that is not a number throws a TypeError, as does an option the library does
+ * not have, with the nearest one named.
  */
 export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 

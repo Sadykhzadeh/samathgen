@@ -62,6 +62,48 @@ const clampLength = (length) => {
   return Math.min(Math.max(Math.trunc(length), LENGTH_MIN), LENGTH_MAX)
 }
 
+// An option the library does not have is an error too: `negative: false` for
+// `negatives: false` would otherwise give a class the negative numbers it
+// asked to be spared, and nothing would say why. `distinct` is a batch option,
+// which a single task has no use for but accepts, so that one set of options
+// can be handed to either.
+const OPTIONS = new Set(['answer', 'brackets', 'distinct', 'max', 'negatives', 'operators', 'quizMode', 'seed'])
+
+const editDistance = (a, b) => {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    previous = row
+  }
+  return previous[b.length]
+}
+
+const unknownOption = (name) => {
+  const lower = name.toLowerCase()
+  const near = [...OPTIONS].find((known) => {
+    const other = known.toLowerCase()
+    return other === lower || other.startsWith(lower) || lower.startsWith(other) || editDistance(lower, other) <= 2
+  })
+  return new TypeError(
+    `unknown option ${JSON.stringify(name)}${near ? `, did you mean ${near}?` : '.'} ` +
+    `The options are ${[...OPTIONS].join(', ')}.`
+  )
+}
+
+const readOptions = (more) => {
+  if (more === undefined || more === null) return {}
+  if (typeof more !== 'object' || Array.isArray(more)) {
+    throw new TypeError(`options must be an object, got ${Array.isArray(more) ? 'an array' : typeof more}`)
+  }
+  for (const name in more) {
+    if (!OPTIONS.has(name)) throw unknownOption(name)
+  }
+  return more
+}
+
 const readAnswer = (answer, max) => {
   if (answer === undefined || answer === null) return undefined
   if (typeof answer !== 'number') {
@@ -213,7 +255,7 @@ const assertReady = () => {
  */
 export const mathGen = (length, more) => {
   assertReady()
-  const options = more || {}
+  const options = readOptions(more)
   const max = readMax(options.max)
   const answer = readAnswer(options.answer, max)
   const allowed = readAllowed(options, answer)
@@ -245,7 +287,7 @@ export const mathGenBatch = (count, length, more) => {
   if (!Number.isInteger(count) || count < 0 || count > BATCH_LIMIT) {
     throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${count}`)
   }
-  const options = more || {}
+  const options = readOptions(more)
   const max = readMax(options.max)
   const answer = readAnswer(options.answer, max)
   const allowed = readAllowed(options, answer)
