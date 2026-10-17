@@ -90,6 +90,10 @@ pub fn generate(
 /// `i` drawn from `seed + i` - so it is exactly the task `generate` gives for
 /// that seed, and a batch costs one crossing of the boundary instead of
 /// `count`. Empty, like `generate`, if any task cannot be built.
+///
+/// With `distinct`, a task that repeats one before it in the batch is drawn
+/// again from the seeds after the batch's own, `seed + count` onwards, each
+/// used once, and kept as it is after `DISTINCT_TRIES` repeats in a row.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn generate_batch(
@@ -102,6 +106,7 @@ pub fn generate_batch(
     allowed: u32,
     max: u32,
     seed: f64,
+    distinct: bool,
 ) -> Vec<i32> {
     let mut out = Vec::with_capacity(count as usize * 24);
     let mut tokens = Vec::with_capacity(96);
@@ -117,12 +122,79 @@ pub fn generate_batch(
         flat: allowed & FLAT != 0,
     };
     let seed = seed.abs() as u64;
+    let mut seen = Seen::new(if distinct { count as usize } else { 0 });
+    let mut spare = seed.wrapping_add(count as u64);
     for i in 0..count {
+        let start = out.len();
         if !write_task(&mut out, &mut tokens, &request, seed.wrapping_add(i as u64)) {
             return Vec::new();
         }
+        if !distinct {
+            continue;
+        }
+        let mut tries = 0;
+        while !seen.insert(&tokens) && tries < DISTINCT_TRIES {
+            out.truncate(start);
+            if !write_task(&mut out, &mut tokens, &request, spare) {
+                return Vec::new();
+            }
+            spare = spare.wrapping_add(1);
+            tries += 1;
+        }
     }
     out
+}
+
+/// How many tasks in a row a distinct batch draws in place of a repeat
+/// before it keeps one. Two numbers of `*` make 58 tasks between them, and
+/// while a draw is as likely to be new as not, sixteen repeats in a row
+/// come once in 65 536.
+const DISTINCT_TRIES: u32 = 16;
+
+/// The tasks a batch holds so far, kept as 64-bit hashes of their tokens
+/// in an open-addressed table. Two different tasks sharing a hash would
+/// cost one task drawn again, and with at most 10 000 of them it is not
+/// worth the memory of keeping the tokens to tell them apart.
+struct Seen {
+    slots: Vec<u64>,
+}
+
+impl Seen {
+    fn new(count: usize) -> Seen {
+        let size = if count == 0 {
+            0
+        } else {
+            (count * 2).next_power_of_two()
+        };
+        Seen {
+            slots: vec![0; size],
+        }
+    }
+
+    /// False if `tokens` is already here. The table is twice the size of
+    /// the batch and each task in it adds one hash at most, so it never
+    /// fills.
+    fn insert(&mut self, tokens: &[Token]) -> bool {
+        // FNV-1a over the codes, with 0 kept to mark an empty slot.
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for &token in tokens {
+            hash ^= code(token) as u32 as u64;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        let hash = hash.max(1);
+        let mask = self.slots.len() - 1;
+        let mut at = (hash ^ (hash >> 32)) as usize & mask;
+        loop {
+            match self.slots[at] {
+                0 => {
+                    self.slots[at] = hash;
+                    return true;
+                }
+                held if held == hash => return false,
+                _ => at = (at + 1) & mask,
+            }
+        }
+    }
 }
 
 struct Request {
@@ -297,7 +369,7 @@ mod tests {
             (32, true, false, true),
         ] {
             let data = generate_batch(
-                50, length, -7.0, use_answer, brackets, quiz_mode, ALL, MAX, 1000.0,
+                50, length, -7.0, use_answer, brackets, quiz_mode, ALL, MAX, 1000.0, false,
             );
             let mut at = 0;
             for i in 0..50 {
@@ -319,9 +391,85 @@ mod tests {
         }
     }
 
+    fn decode_batch(data: &[i32]) -> Vec<String> {
+        let mut tasks = Vec::new();
+        let mut at = 0;
+        while at < data.len() {
+            let (task, used) = decode_at(&data[at..]);
+            tasks.push(task.task);
+            at += used;
+        }
+        tasks
+    }
+
+    #[test]
+    fn a_distinct_batch_repeats_nothing_and_leaves_the_rest_in_place() {
+        const MUL: u32 = 1 << 2;
+        for seed in (0..50).map(|n| n as f64 * 1000.0) {
+            let batch = |distinct| {
+                decode_batch(&generate_batch(
+                    20, 2, 0.0, false, false, true, MUL, MAX, seed, distinct,
+                ))
+            };
+            let (plain, distinct) = (batch(false), batch(true));
+            assert_eq!(distinct.len(), 20);
+            let unique: std::collections::BTreeSet<&String> = distinct.iter().collect();
+            assert_eq!(unique.len(), 20, "{distinct:?}");
+
+            // A task that is not a repeat stays where it was, and the ones
+            // in place of repeats come from the seeds after the batch, in
+            // order.
+            let mut spares = (20..).map(|i| {
+                decode(&generate(
+                    2,
+                    0.0,
+                    false,
+                    false,
+                    true,
+                    MUL,
+                    MAX,
+                    seed + i as f64,
+                ))
+                .task
+            });
+            for (i, task) in distinct.iter().enumerate() {
+                if !distinct[..i].contains(&plain[i]) {
+                    assert_eq!(task, &plain[i], "task {i} from seed {seed}");
+                } else {
+                    assert!(
+                        spares.any(|spare| &spare == task),
+                        "task {i} from seed {seed}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_distinct_batch_keeps_repeats_once_there_is_nothing_new() {
+        // 10 as a sum of two numbers from 1 up is one of nine tasks.
+        const ADD: u32 = 1;
+        let data = generate_batch(
+            30,
+            2,
+            10.0,
+            true,
+            false,
+            false,
+            ADD | NO_NEGATIVES,
+            MAX,
+            1.0,
+            true,
+        );
+        let tasks = decode_batch(&data);
+        assert_eq!(tasks.len(), 30);
+        let unique: std::collections::BTreeSet<&String> = tasks.iter().collect();
+        assert_eq!(unique.len(), 9, "{tasks:?}");
+    }
+
     #[test]
     fn an_empty_batch_is_empty() {
-        assert!(generate_batch(0, 4, 0.0, false, false, true, ALL, MAX, 1.0).is_empty());
+        assert!(generate_batch(0, 4, 0.0, false, false, true, ALL, MAX, 1.0, true).is_empty());
     }
 
     #[test]

@@ -208,7 +208,9 @@ export const mathGen = (length, more) => {
 /**
  * Builds `count` tasks at once, in a single call into WebAssembly. Task `i`
  * is exactly what `mathGen(length, { ...more, seed: seed + i })` gives, so a
- * batch is reproducible from one seed and can be split or resumed.
+ * batch is reproducible from one seed and can be split or resumed. With
+ * `distinct: true` a task that repeats one before it is replaced by the
+ * next one from `seed + count` on that does not.
  */
 export const mathGenBatch = (count, length, more) => {
   assertReady()
@@ -230,7 +232,8 @@ export const mathGenBatch = (count, length, more) => {
     options.quizMode === true,
     allowed,
     max,
-    seed
+    seed,
+    options.distinct === true
   )
   if (data.length === 0 && count > 0) throw cannotBuild(length, answer, max, options)
   const tasks = new Array(count)
