@@ -14,6 +14,7 @@
 - [About The Library](#about-the-library)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Examples](#examples)
 - [API](#api)
 - [How it works](#how-it-works)
 - [Building from source](#building-from-source)
@@ -79,6 +80,42 @@ written this way also runs under Node, in tests or on a server.
 
 `test/browser.html` is a page that does exactly this and then checks 20 000
 generated tasks; serve the repository over HTTP and open it.
+
+## Examples
+
+A worksheet for a class that has met adding and taking away within twenty and
+nothing else, with the answers to hand. Everyone given the same `seed` gets
+the same sheet, and the pupil's own number as the seed gives each a sheet of
+their own:
+
+```js
+import { mathGenBatch } from 'samathgen'
+
+const sheet = mathGenBatch(10, 3, {
+  operators: ['+', '-'], negatives: false, max: 20, brackets: 'never', seed: 2024,
+})
+sheet.forEach(({ task }, i) => console.log(`${i + 1}. ${task.join('')} =`))
+console.log('Answers:', sheet.map(({ answer }) => answer).join(', '))
+```
+
+Multiple choice, answers from 50 to 100 and no two questions alike. `quizOptions`
+holds four numbers, one of them the answer, in no order that gives it away:
+
+```js
+import { mathGenBatch } from 'samathgen'
+
+const quiz = mathGenBatch(5, 2, {
+  operators: ['*'], answer: [50, 100], max: 100, quizMode: true, distinct: true,
+})
+for (const { task, quizOptions } of quiz) {
+  console.log(`${task.join('')} = ?  ${quizOptions.join('  ')}`)
+}
+```
+
+Every task reads as a sum that works out to its answer, so a program can check
+a pupil's reply without trusting the generator: `Function` or any
+expression parser given `task.join('')` returns `answer`, and a harder sheet
+is a longer `length` with `brackets: true`.
 
 ## API
 
