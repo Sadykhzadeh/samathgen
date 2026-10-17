@@ -57,6 +57,7 @@
     "build": "node scripts/build.mjs",
     "test": "cargo test --release && npm run test:js",
     "test:rust": "cargo test --release",
+    "test:types": "npx -y -p typescript tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 test/types.ts",
     "test:js": "node test/contract.mjs && node test/readme.mjs",
     "bench": "node bench/throughput.mjs",
     "prepublishOnly": "npm run build"

@@ -317,6 +317,7 @@ Needs a Rust toolchain with the `wasm32-unknown-unknown` target, plus
 rustup target add wasm32-unknown-unknown
 npm run build          # writes dist/node and dist/web
 npm test               # cargo test, then the JavaScript contract suite
+npm run test:types     # the declarations against test/types.ts (needs tsc via npx)
 ```
 
 `cargo test` alone exercises the generator natively, with an expression parser
