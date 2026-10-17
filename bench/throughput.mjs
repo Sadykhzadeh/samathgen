@@ -36,6 +36,19 @@ const measure = (label, run) => {
 console.log(`node ${process.version}, ${TASKS.toLocaleString('en-US')} tasks per run`)
 console.log(`require('samathgen')                ${loadMs.toFixed(1)} ms`)
 
+// A package to hold this one against, as the same loop: the 0.1.3 that npm
+// serves, say, after `npm install --prefix /tmp/old samathgen@0.1.3`:
+//
+//   SAMATHGEN_BASELINE=/tmp/old/node_modules/samathgen npm run bench
+if (process.env.SAMATHGEN_BASELINE) {
+  const baseline = require(process.env.SAMATHGEN_BASELINE)
+  for (const [label, brackets] of [['baseline mathGen', false], ['baseline mathGen, brackets', true]]) {
+    measure(label, () => {
+      for (let i = 0; i < TASKS; i++) sink += baseline.mathGen(2 + (i % 7), { quizMode: true, brackets }).answer
+    })
+  }
+}
+
 measure('mathGen', () => {
   for (let i = 0; i < TASKS; i++) sink += mathGen(2 + (i % 7), { quizMode: true }).answer
 })
