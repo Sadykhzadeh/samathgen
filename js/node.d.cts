@@ -76,15 +76,24 @@ export interface MathGenResult {
  */
 export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 
+export interface MathGenBatchOptions extends MathGenOptions {
+  /** Leave no task in the batch that repeats one before it: a repeat is
+   *  replaced by the task for the next seed from `seed + count` on, and
+   *  kept only once 16 of those in a row repeat too, as when the options
+   *  allow fewer tasks than `count`. Default: false. */
+  distinct?: boolean
+}
+
 /**
  * Builds `count` tasks in a single call into WebAssembly, about twice as fast
  * per task as calling `mathGen` in a loop. Task `i` is exactly what
- * `mathGen(length, { ...more, seed: seed + i })` gives.
+ * `mathGen(length, { ...more, seed: seed + i })` gives, unless `distinct`
+ * replaced it.
  *
  * `count` must be a whole number from 0 to 10000, or this throws a
  * RangeError.
  */
-export function mathGenBatch (count: number, length: number, more?: MathGenOptions): MathGenResult[]
+export function mathGenBatch (count: number, length: number, more?: MathGenBatchOptions): MathGenResult[]
 
 /** What the global constructor `Name` makes, or `never` where nothing
  *  declares one. A Node project has no DOM library, and naming `Response`

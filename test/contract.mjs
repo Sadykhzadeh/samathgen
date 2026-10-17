@@ -300,6 +300,29 @@ const suite = (mathGen, mathGenBatch) => {
     assert.equal(wrong, 0)
   })
 
+  check('distinct: true leaves no repeat in a batch and the rest in place', () => {
+    for (const [length, more] of [[2, { operators: ['*'] }], [2, { operators: ['/'], max: 100, quizMode: true }], [3, {}]]) {
+      for (let seed = 0; seed < 50; seed++) {
+        const plain = mathGenBatch(20, length, { ...more, seed: seed * 100 })
+        const distinct = mathGenBatch(20, length, { ...more, seed: seed * 100, distinct: true })
+        const texts = distinct.map((task) => task.task.join(''))
+        assert.equal(new Set(texts).size, 20, texts.join(' '))
+        distinct.forEach((task, i) => {
+          if (!texts.slice(0, i).includes(plain[i].task.join(''))) assert.deepEqual(task, plain[i], `task ${i}`)
+          // eslint-disable-next-line no-eval
+          assert.equal(eval(texts[i]), task.answer, texts[i])
+        })
+      }
+    }
+    // Ten as a sum of two numbers from 1 up is one of nine tasks.
+    const sums = mathGenBatch(30, 2, { answer: 10, operators: ['+'], negatives: false, distinct: true, seed: 1 })
+    assert.equal(new Set(sums.map((task) => task.task.join(''))).size, 9)
+    for (const distinct of [false, 1, 'true', null]) {
+      assert.deepEqual(mathGenBatch(20, 2, { seed: 5, distinct }), mathGenBatch(20, 2, { seed: 5 }), String(distinct))
+    }
+    assert.deepEqual(mathGen(2, { seed: 5, distinct: true }), mathGen(2, { seed: 5 }))
+  })
+
   check('a batch count outside 0..10000 is refused', () => {
     assert.deepEqual(mathGenBatch(0, 4), [])
     assert.equal(mathGenBatch(10000, 2, { seed: 1 }).length, 10000)
@@ -543,6 +566,8 @@ check('the same seed gives the same task from either entry point', () => {
   }
   const more = { seed: 7, quizMode: true, brackets: true }
   assert.deepEqual(webMathGenBatch(500, 6, more), nodeMathGenBatch(500, 6, more), 'batch')
+  const tables = { seed: 7, operators: ['*'], distinct: true }
+  assert.deepEqual(webMathGenBatch(40, 2, tables), nodeMathGenBatch(40, 2, tables), 'distinct batch')
 })
 
 console.log(`\n${checks} passed, ${failures} failed`)
