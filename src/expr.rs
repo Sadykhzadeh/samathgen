@@ -709,6 +709,84 @@ pub fn generate(config: &Config, rng: &mut Rng, tokens: &mut Vec<Token>) -> Opti
     generate_with(config, rng, tokens, RESTARTS)
 }
 
+/// Whether the rules alone rule the task out, whatever growing it would do.
+fn unbuildable(config: &Config) -> bool {
+    let wanted = config.length.clamp(2, 32);
+    if !config.negatives && config.answer < 0 {
+        return true;
+    }
+    // Every term is at least 1, and growing towards it would only end in
+    // the corner of all ones, as many times as it was tried.
+    if !config.negatives && config.ops == Ops(Op::Add.bit()) && config.answer < wanted as i64 {
+        return true;
+    }
+
+    // Without brackets `/` alone is one chain, whose first number is the
+    // answer times every divisor after it, each at least 2, and `-` alone
+    // without negatives one whose first number is the answer plus every
+    // number after it, each at least 1. Past the max, growing one is in vain.
+    let rest = wanted as i64 - 1;
+    if config.flat && config.ops == Ops(Op::Div.bit()) && config.answer.abs() << rest > config.max {
+        return true;
+    }
+    config.flat
+        && !config.negatives
+        && config.ops == Ops(Op::Sub.bit())
+        && config.answer + rest > config.max
+}
+
+/// How many times a task is drawn for its group: `brackets` asks for a shape,
+/// not a different answer, so the whole task is drawn again until the shape
+/// appears. A group needs a sum or product inside another one, so two numbers
+/// can never have one.
+fn group_attempts(config: &Config, wanted: usize) -> usize {
+    if config.brackets && !config.flat && config.ops.can_need_brackets() && wanted >= 3 {
+        24
+    } else {
+        1
+    }
+}
+
+/// `generate_with` for one answer of a search that shares its growths with
+/// the other answers it tries: each growth takes one from `growths`, and with
+/// none left the answer is given up. Unlike `generate_with` it does not
+/// restart a cornered tree on its own account, so the budget is what limits
+/// the search.
+pub fn generate_within(
+    config: &Config,
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+    growths: &mut usize,
+) -> Option<Expr> {
+    if unbuildable(config) {
+        return None;
+    }
+    let wanted = config.length.clamp(2, 32);
+    let low = if config.negatives { -config.max } else { 0 };
+    let mut last = None;
+    for _ in 0..group_attempts(config, wanted) {
+        let expr = loop {
+            if *growths == 0 {
+                return last;
+            }
+            *growths -= 1;
+            match grow(config, wanted, rng) {
+                (expr, leaves) if leaves == wanted => break expr,
+                (_, 1) => return None,
+                _ => {}
+            }
+        };
+        tokens.clear();
+        expr.write(tokens, low, config.max);
+        if !config.brackets || has_group(tokens) {
+            return Some(expr);
+        }
+        last = Some(expr);
+    }
+    // `tokens` still holds the last attempt, which is the one returned.
+    last
+}
+
 /// Builds the task and writes its tokens into `tokens`, which the bracket
 /// check needs anyway, so the caller does not render it a second time.
 ///
@@ -738,43 +816,13 @@ pub fn generate_with(
     tokens: &mut Vec<Token>,
     restarts: usize,
 ) -> Option<Expr> {
+    if unbuildable(config) {
+        return None;
+    }
     let wanted = config.length.clamp(2, 32);
-    if !config.negatives && config.answer < 0 {
-        return None;
-    }
-    // Every term is at least 1, and growing towards it would only end in
-    // the corner of all ones, as many times as it was tried.
-    if !config.negatives && config.ops == Ops(Op::Add.bit()) && config.answer < wanted as i64 {
-        return None;
-    }
-
-    // Without brackets `/` alone is one chain, whose first number is the
-    // answer times every divisor after it, each at least 2, and `-` alone
-    // without negatives one whose first number is the answer plus every
-    // number after it, each at least 1. Past the max, growing one is in vain.
-    let rest = wanted as i64 - 1;
-    if config.flat && config.ops == Ops(Op::Div.bit()) && config.answer.abs() << rest > config.max {
-        return None;
-    }
-    if config.flat
-        && !config.negatives
-        && config.ops == Ops(Op::Sub.bit())
-        && config.answer + rest > config.max
-    {
-        return None;
-    }
-
-    // `brackets` asks for a shape, not a different answer, so the whole task
-    // is simply drawn again until the shape appears. If it does not after a
-    // few tries the last one is returned: a task that evaluates correctly
-    // without brackets beats no task at all. A group needs a sum or product
-    // inside another one, so two numbers can never have one.
-    let attempts =
-        if config.brackets && !config.flat && config.ops.can_need_brackets() && wanted >= 3 {
-            24
-        } else {
-            1
-        };
+    // If the shape does not appear after a few tries the last task is
+    // returned: one that evaluates correctly without brackets beats none.
+    let attempts = group_attempts(config, wanted);
     let mut last = None;
     let low = if config.negatives { -config.max } else { 0 };
 

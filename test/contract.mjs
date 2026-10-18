@@ -512,6 +512,20 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(4, { negatives: 0 }), /negatives must be true or false, got 0$/)
   })
 
+  check('a task that can be built is not refused for want of a lucky seed', () => {
+    // 8/2/2/2 is the one flat task of four numbers within 10 that makes 1;
+    // 18-1-1-1-1-1 is one that makes 13 within 20 without negatives. Both
+    // used to be refused for some seeds.
+    for (let seed = 0; seed < 1000; seed++) {
+      const one = mathGen(4, { operators: ['/'], brackets: 'never', max: 10, answer: 1, seed })
+      assert.equal(eval(one.task.join('')), 1, `seed ${seed}`)
+      const ranged = mathGen(4, { operators: ['/'], brackets: 'never', max: 10, answer: [1, 5], seed })
+      assert.equal(eval(ranged.task.join('')), ranged.answer, `seed ${seed}`)
+      const minus = mathGen(6, { operators: ['-'], brackets: 'never', negatives: false, max: 20, answer: 13, seed })
+      assert.equal(eval(minus.task.join('')), 13, `seed ${seed}`)
+    }
+  })
+
   check('negatives: false refuses what it cannot build', () => {
     assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
     assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)
