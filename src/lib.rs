@@ -28,6 +28,15 @@ use wasm_bindgen::JsValue;
 /// for it.
 const WITHOUT_UNITS_RESTARTS: usize = 1;
 
+/// How many trees are grown, in all, by each of the two searches made once the
+/// usual one has refused a request: one for tasks without a factor of 1 and
+/// one with. Some chains, such as `/` alone within 10 without brackets, grow
+/// into a corner in all but a few tries, so the usual 64 restarts refused a
+/// buildable request for one seed in seven. Those seeds get this many more
+/// growths, shared by the answers on offer, which at most about doubles the
+/// time a refusal takes.
+const FALLBACK_GROWTHS: usize = 1024;
+
 /// How many answers of a range are tried before the request is refused: all
 /// of a range this small, this many drawn from a bigger one.
 const ANSWER_TRIES: usize = 64;
@@ -407,6 +416,39 @@ fn grow_for_some_answer(
     None
 }
 
+/// Grows a task for an answer from `low..=high` as `grow_for_some_answer`
+/// does, but with the growths in `growths` shared by the answers tried: once
+/// they are spent the search stops, and nothing restarts on its own account.
+fn grow_within(
+    (low, high): (i64, i64),
+    config: impl Fn(i64) -> Config,
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+    growths: &mut usize,
+) -> Option<(i64, expr::Expr)> {
+    let span = (high - low + 1) as u64;
+    let walked = span <= ANSWER_TRIES as u64;
+    let mut candidates = [0; ANSWER_TRIES];
+    let mut left = if walked { span as usize } else { ANSWER_TRIES };
+    for (at, slot) in candidates[..left].iter_mut().enumerate() {
+        *slot = if walked {
+            low + at as i64
+        } else {
+            low + rng.below(span) as i64
+        };
+    }
+    while left > 0 && *growths > 0 {
+        let at = rng.below(left as u64) as usize;
+        let answer = candidates[at];
+        if let Some(expression) = expr::generate_within(&config(answer), rng, tokens, growths) {
+            return Some((answer, expression));
+        }
+        left -= 1;
+        candidates.swap(at, left);
+    }
+    None
+}
+
 /// Appends one task to `out`, or returns false and appends nothing when the
 /// operators cannot build it.
 fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, seed: u64) -> bool {
@@ -455,32 +497,70 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     // A factor of 1 is the last resort: tasks without one are looked for
     // among every answer on offer first, and the others only when there are
     // none. Without `*` the question does not arise.
-    let found = if ops.has(Op::Mul) {
-        grow_for_some_answer(
-            (low, high),
-            |answer| config(answer, false),
-            WITHOUT_UNITS_RESTARTS,
-            &mut rng,
-            tokens,
-        )
-        .or_else(|| {
-            grow_for_some_answer(
+    let found = {
+        let mut search = |rng: &mut Rng, first: usize, second: usize| {
+            if ops.has(Op::Mul) {
+                grow_for_some_answer(
+                    (low, high),
+                    |answer| config(answer, false),
+                    first,
+                    rng,
+                    tokens,
+                )
+                .or_else(|| {
+                    grow_for_some_answer(
+                        (low, high),
+                        |answer| config(answer, true),
+                        second,
+                        rng,
+                        tokens,
+                    )
+                })
+            } else {
+                grow_for_some_answer(
+                    (low, high),
+                    |answer| config(answer, true),
+                    second,
+                    rng,
+                    tokens,
+                )
+            }
+        };
+        search(&mut rng, WITHOUT_UNITS_RESTARTS, expr::RESTARTS)
+    }
+    // Only a request the usual search refuses is searched again, within a
+    // budget of growths, so a seed that gave a task before gives the same
+    // one now.
+    .or_else(|| {
+        let mut without_units = FALLBACK_GROWTHS;
+        let mut with_units = FALLBACK_GROWTHS;
+        if ops.has(Op::Mul) {
+            grow_within(
                 (low, high),
-                |answer| config(answer, true),
-                expr::RESTARTS,
+                |answer| config(answer, false),
                 &mut rng,
                 tokens,
+                &mut without_units,
             )
-        })
-    } else {
-        grow_for_some_answer(
-            (low, high),
-            |answer| config(answer, true),
-            expr::RESTARTS,
-            &mut rng,
-            tokens,
-        )
-    };
+            .or_else(|| {
+                grow_within(
+                    (low, high),
+                    |answer| config(answer, true),
+                    &mut rng,
+                    tokens,
+                    &mut with_units,
+                )
+            })
+        } else {
+            grow_within(
+                (low, high),
+                |answer| config(answer, true),
+                &mut rng,
+                tokens,
+                &mut with_units,
+            )
+        }
+    });
     let Some((answer, expression)) = found else {
         return false;
     };
@@ -763,6 +843,36 @@ mod tests {
     #[test]
     fn an_empty_batch_is_empty() {
         assert!(generate_batch(0, 4, 0.0, false, false, true, ALL, MAX, 1.0, true).is_empty());
+    }
+
+    #[test]
+    fn a_task_that_can_be_built_is_not_refused_for_want_of_a_lucky_seed() {
+        const DIV: u32 = 1 << 3;
+        const SUB: u32 = 1 << 1;
+        // 8/2/2/2 is the one task of four numbers, flat and within 10, that
+        // makes 1, and a fixed count of restarts used to refuse one seed in
+        // seven of them.
+        for seed in 0..1000 {
+            let data = generate(4, 1.0, true, false, false, DIV | FLAT, 10, seed as f64);
+            assert!(!data.is_empty(), "refused seed {seed}");
+            assert_eq!(decode(&data).answer, 1);
+            let data = generate_in(4, 1.0, 5.0, DIV | FLAT, 10, seed as f64);
+            assert!(!data.is_empty(), "refused seed {seed} for a range");
+        }
+        // 18-1-1-1-1-1 makes 13 within 20, flat and without negatives.
+        for seed in 0..1000 {
+            let data = generate(
+                6,
+                13.0,
+                true,
+                false,
+                false,
+                SUB | FLAT | NO_NEGATIVES,
+                20,
+                seed as f64,
+            );
+            assert!(!data.is_empty(), "refused seed {seed}");
+        }
     }
 
     /// One task for an answer drawn from `low..=high`, empty if none can be
