@@ -577,8 +577,9 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     let quiz = if quiz_mode {
         options::quiz_options(answer, if negatives { -max } else { 0 }, max, &mut rng)
     } else {
-        Vec::new()
+        [0; options::COUNT]
     };
+    let quiz = &quiz[..if quiz_mode { options::COUNT } else { 0 }];
 
     out.push(answer as i32);
     out.push(quiz.len() as i32);
