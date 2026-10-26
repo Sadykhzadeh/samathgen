@@ -72,6 +72,11 @@ thread_local! {
     static RESULT: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
 }
 
+// The tokens of the task being built, kept between calls for the same reason.
+thread_local! {
+    static TOKENS: RefCell<Vec<Token>> = const { RefCell::new(Vec::new()) };
+}
+
 /// A result bigger than this, a batch of thousands, is let go of at the
 /// next call rather than kept.
 const RESULT_KEEP: usize = 1 << 14;
@@ -168,12 +173,7 @@ fn fill_task(
         allowed,
         max,
     );
-    write_task(
-        out,
-        &mut Vec::with_capacity(96),
-        &request,
-        seed.abs() as u64,
-    )
+    TOKENS.with(|tokens| write_task(out, &mut tokens.borrow_mut(), &request, seed.abs() as u64))
 }
 
 /// `count` tasks laid out one after another as `generate` lays out one, task
