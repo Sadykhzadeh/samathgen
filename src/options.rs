@@ -18,7 +18,7 @@ pub const COUNT: usize = 4;
 /// room for every rank, and the answer takes the ranks there is room for,
 /// each as likely as the others. The two are at least 3 apart, so there is
 /// always room for four.
-pub fn quiz_options(answer: i64, floor: i64, ceiling: i64, rng: &mut Rng) -> Vec<i64> {
+pub fn quiz_options(answer: i64, floor: i64, ceiling: i64, rng: &mut Rng) -> [i64; COUNT] {
     // How many options are below the answer: no more than there are numbers
     // from the floor up to it, and no fewer than do not fit between it and
     // the ceiling.
@@ -41,7 +41,10 @@ pub fn quiz_options(answer: i64, floor: i64, ceiling: i64, rng: &mut Rng) -> Vec
     };
 
     let place = pattern[rank];
-    let mut options: Vec<i64> = pattern.iter().map(|&p| answer + p - place).collect();
+    let mut options = [0; COUNT];
+    for (option, &p) in options.iter_mut().zip(pattern.iter()) {
+        *option = answer + p - place;
+    }
     rng.shuffle(&mut options);
     options
 }
@@ -62,7 +65,7 @@ mod tests {
             let answer = (seed as i64) % 97 - 48;
             let options = quiz_options(answer, i64::MIN, i64::MAX, &mut rng);
             assert_eq!(options.len(), COUNT);
-            let mut sorted = options.clone();
+            let mut sorted = options.to_vec();
             sorted.sort();
             sorted.dedup();
             assert_eq!(sorted.len(), COUNT, "duplicates in {options:?}");
@@ -96,7 +99,7 @@ mod tests {
             let options = quiz_options(answer, 0, i64::MAX, &mut rng);
             assert!(options.iter().all(|&o| o >= 0), "{options:?} for {answer}");
             assert!(options.contains(&answer));
-            let mut sorted = options.clone();
+            let mut sorted = options.to_vec();
             sorted.sort();
             sorted.dedup();
             assert_eq!(sorted.len(), COUNT, "duplicates in {options:?}");
