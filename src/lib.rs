@@ -569,9 +569,8 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     // brackets are placed by precedence, so the two halves cannot disagree.
     // Walking at most 32 leaves to say so out loud is cheap, and it means a
     // later change cannot quietly bring back the bug this rewrite removed.
-    assert_eq!(
-        expression.value(),
-        answer,
+    assert!(
+        expression.value() == answer,
         "generated task does not evaluate to its answer"
     );
 
