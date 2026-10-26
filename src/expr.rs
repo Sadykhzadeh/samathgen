@@ -580,13 +580,6 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
         }
     };
 
-    let mut divisors = [0; MAX_DIVISORS];
-    let divisor_count = if op == Op::Mul {
-        useful_divisors(value, &mut divisors)
-    } else {
-        0
-    };
-
     // A handful of attempts. The size of each draw is fitted to the bounds
     // beforehand, so what is left to reject is a sign that leaves no room
     // and the odd draw that comes out as 0.
@@ -631,13 +624,7 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
                 let right = rng.range(1, most) * toward_value * sign;
                 (value + right, Op::Sub, right)
             }
-            Op::Mul => {
-                let left = *rng.pick(&divisors[..divisor_count]) * flip(rng);
-                if left == 0 || value % left != 0 {
-                    continue;
-                }
-                (left, Op::Mul, value / left)
-            }
+            Op::Mul => return try_split_product(value, config, rng),
             Op::Div => {
                 // The left operand is the value times the right.
                 let most = DIVISOR_MAX.min(config.max / value.abs().max(1));
@@ -649,17 +636,43 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
             }
         };
 
-        let (left, _, right) = candidate;
-        if left == 0 || right == 0 {
+        if fits(candidate, config) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Whether neither operand is 0, or past the max, or below 0 when there are
+/// no negatives.
+fn fits((left, _, right): (i64, Op, i64), config: &Config) -> bool {
+    left != 0
+        && right != 0
+        && left.abs() <= config.max
+        && right.abs() <= config.max
+        && (config.negatives || (left >= 0 && right >= 0))
+}
+
+/// `try_split` for a product, which draws its left operand from the
+/// divisors of the value. They are kept apart from the other operators so
+/// that room for 64 of them is only cleared when they are needed.
+fn try_split_product(value: i64, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+    let mut divisors = [0; MAX_DIVISORS];
+    let count = useful_divisors(value, &mut divisors);
+    for _ in 0..16 {
+        let divisor = *rng.pick(&divisors[..count]);
+        let left = if config.negatives {
+            divisor * occasionally_negative(rng)
+        } else {
+            divisor
+        };
+        if left == 0 || value % left != 0 {
             continue;
         }
-        if left.abs() > config.max || right.abs() > config.max {
-            continue;
+        let candidate = (left, Op::Mul, value / left);
+        if fits(candidate, config) {
+            return Some(candidate);
         }
-        if !negatives && (left < 0 || right < 0) {
-            continue;
-        }
-        return Some(candidate);
     }
     None
 }
