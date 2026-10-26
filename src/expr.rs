@@ -224,6 +224,16 @@ impl Expr {
         }
     }
 
+    /// Whether no leaf can be split, and every attempt to would fail without
+    /// drawing anything: a leaf with no operator to split it by, which with
+    /// `*` alone and no factor of 1 is every prime and every 1.
+    fn cornered(&self, config: &Config) -> bool {
+        self.nodes.iter().all(|node| match *node {
+            Node::Num(n) => split_candidates(n, config.ops, config).1 == 0,
+            Node::Binary { .. } => true,
+        })
+    }
+
     /// `room` is the operators the subtree at `at` may be split by where it
     /// stands, which is all of them unless the task is to have no brackets.
     fn split_nth_leaf(
@@ -489,9 +499,9 @@ fn useful_divisors(value: i64, out: &mut [i64; MAX_DIVISORS]) -> usize {
     count
 }
 
-/// Picks `(a, op, b)` such that `a op b == value` exactly, with `op` one of
-/// `ops`, or `None` when this value cannot be split within the bounds above.
-fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+/// The operators `value` may be split by, in the order of `Op`, and whether
+/// it is a number only `1*p` can make, which `*` is the last resort for.
+fn split_candidates(value: i64, ops: Ops, config: &Config) -> ([Op; 4], usize, bool) {
     // 0 * anything and 0 / anything are degenerate: the other operand carries
     // no constraint, which is how the old generator ended up emitting
     // "1*3*2*0+0*0*0*0..." for a large length. Without negatives, 0 and 1
@@ -518,7 +528,13 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
             count += 1;
         }
     }
+    (candidates, count, only_units)
+}
 
+/// Picks `(a, op, b)` such that `a op b == value` exactly, with `op` one of
+/// `ops`, or `None` when this value cannot be split within the bounds above.
+fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+    let (mut candidates, count, only_units) = split_candidates(value, ops, config);
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
     if only_units && candidates.len() > 1 {
@@ -698,6 +714,15 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
             misses = 0;
         } else {
             misses += 1;
+            // Nothing is split from here on, and each remaining miss draws
+            // the leaf it lands on and nothing else, so the draws are made
+            // without visiting the tree.
+            if misses == 1 && expr.cornered(config) {
+                for _ in 1..leaves * MISSES_PER_LEAF {
+                    rng.below(leaves as u64);
+                }
+                break;
+            }
         }
     }
     (expr, leaves)
@@ -1074,6 +1099,28 @@ mod tests {
             let count = useful_divisors(value, &mut out);
             assert_eq!(&out[..count], reference(value).as_slice(), "{value}");
         }
+    }
+
+    #[test]
+    fn a_tree_of_primes_is_cornered_for_a_product_without_units_only() {
+        let config = |units| Config {
+            answer: 12,
+            length: 3,
+            brackets: false,
+            ops: Ops(Op::Mul.bit()),
+            negatives: true,
+            max: MAX_ABS,
+            flat: false,
+            units,
+        };
+        let mut expr = Expr::leaf(2, 2);
+        let rest = Expr::num(7);
+        expr = Expr::binary(Op::Mul, &expr, &rest);
+        assert!(expr.cornered(&config(false)));
+        assert!(!expr.cornered(&config(true)));
+
+        let with_composite = Expr::binary(Op::Mul, &expr, &Expr::num(12));
+        assert!(!with_composite.cornered(&config(false)));
     }
 
     #[test]
