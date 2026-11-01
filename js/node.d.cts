@@ -41,7 +41,7 @@ export interface MathGenOptions {
    *  Throws a RangeError for an unknown or empty list, and for the two
    *  combinations that cannot build a task: an answer of 0 without `+` or
    *  `-`, and an answer past half of max either side with `/` alone. */
-  operators?: Operators[]
+  operators?: readonly Operators[]
   /** Set to false to keep every number, every quiz option and every step of
    *  working the task out left to right at 0 or above. A RangeError is then
    *  thrown for a negative answer, an answer of 0 without `-`, `+` alone

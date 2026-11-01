@@ -24,6 +24,10 @@ mathGen(3, { answer: [50, 100] })
 const range = [50, 100] as const
 mathGen(3, { answer: range })
 
+// So is a list of operators, which is not changed.
+const addAndTakeAway = ['+', '-'] as const
+mathGen(3, { operators: addAndTakeAway })
+
 // A task is made of numbers, operators and brackets.
 const pieces: Array<number | Operators | '(' | ')'> = task.task
 const answer: number = task.answer
