@@ -82,6 +82,42 @@ impl Rng {
         }
     }
 
+    /// Leaves the generator where `count` calls of `below(bound)` would,
+    /// for a caller that has no use for what they draw. Taking the draws
+    /// without handing each one back is a third cheaper than calling
+    /// `below` in a loop, which matters where a growth that is already known
+    /// to be stuck draws a few hundred of them to keep the stream in step.
+    pub fn skip_below(&mut self, bound: u64, count: usize) {
+        assert!(bound > 0, "bound must be positive");
+        if bound > u32::MAX as u64 {
+            for _ in 0..count {
+                self.below(bound);
+            }
+            return;
+        }
+        let bound = bound as u32;
+        let (mut state, inc) = (self.state, self.inc);
+        // A draw is thrown away, and the next one taken, while the low half
+        // of its product is under `2^32 % bound`, which `below` works out
+        // only for a draw under `bound`.
+        let mut threshold = None;
+        for _ in 0..count {
+            loop {
+                let old = state;
+                state = old.wrapping_mul(MULTIPLIER).wrapping_add(inc);
+                let xorshifted = (((old >> 18) ^ old) >> 27) as u32;
+                let drawn = xorshifted.rotate_right((old >> 59) as u32);
+                let low = (drawn as u64 * bound as u64) as u32;
+                if low >= bound
+                    || low >= *threshold.get_or_insert_with(|| bound.wrapping_neg() % bound)
+                {
+                    break;
+                }
+            }
+        }
+        self.state = state;
+    }
+
     /// Uniform in `low..=high`.
     pub fn range(&mut self, low: i64, high: i64) -> i64 {
         assert!(low <= high, "empty range");
@@ -191,6 +227,29 @@ mod tests {
             for (bucket, &count) in counts.iter().enumerate() {
                 let drift = (count as f64 - expected).abs() / expected;
                 assert!(drift < 0.05, "bound {bound}: bucket {bucket} drew {count}");
+            }
+        }
+    }
+
+    #[test]
+    fn skipping_draws_leaves_the_stream_where_drawing_them_does() {
+        // 3_000_000_000 is where `below` throws a draw away nearly one time
+        // in three, and 1 << 33 takes the 64-bit path.
+        for bound in [1u64, 2, 3, 5, 32, 10_000, 3_000_000_000, 1 << 33] {
+            for count in [0usize, 1, 2, 15, 480] {
+                let mut drawn = Rng::new(bound + count as u64);
+                let mut skipped = Rng::new(bound + count as u64);
+                for _ in 0..count {
+                    drawn.below(bound);
+                }
+                skipped.skip_below(bound, count);
+                for _ in 0..4 {
+                    assert_eq!(
+                        drawn.next_u32(),
+                        skipped.next_u32(),
+                        "bound {bound}, count {count}"
+                    );
+                }
             }
         }
     }

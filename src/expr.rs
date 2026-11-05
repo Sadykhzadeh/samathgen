@@ -731,9 +731,7 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
             // the leaf it lands on and nothing else, so the draws are made
             // without visiting the tree.
             if misses == 1 && expr.cornered(config) {
-                for _ in 1..leaves * MISSES_PER_LEAF {
-                    rng.below(leaves as u64);
-                }
+                rng.skip_below(leaves as u64, leaves * MISSES_PER_LEAF - 1);
                 break;
             }
         }
