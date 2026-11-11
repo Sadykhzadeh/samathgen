@@ -269,7 +269,7 @@ fn fill_batch(
 }
 
 /// How many tasks in a row a distinct batch draws in place of a repeat
-/// before it keeps one. Two numbers of `*` make 58 tasks between them, and
+/// before it keeps one. Two numbers of `*` make 42 tasks between them, and
 /// while a draw is as likely to be new as not, sixteen repeats in a row
 /// come once in 65 536.
 const DISTINCT_TRIES: u32 = 16;

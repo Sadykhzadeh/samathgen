@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: '26'
           cache: npm
-      - run: npm install
+      - run: npm ci
       - run: npm run build
       - name: the generated task has to evaluate to its answer, 200000 times
         run: npm run test:js
