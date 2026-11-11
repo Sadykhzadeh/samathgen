@@ -2,7 +2,7 @@
 name = "samathgen"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.81"
 description = "Generates math expressions for education purposes"
 license = "GPL-3.0-or-later"
 repository = "https://got.az/azer/samathgen"
