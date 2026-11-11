@@ -40,6 +40,11 @@ batch.map((each) => each.task.join(''))
 // init() is there under Node as well, and resolves.
 init().then(() => mathGen(2))
 
+// null is the default for every option, as the README says, and for a batch too.
+mathGen(4, { seed: null, max: null })
+mathGen(4, { answer: null, brackets: null, quizMode: null, operators: null, negatives: null })
+mathGenBatch(3, 2, { distinct: null, seed: null })
+
 // @ts-expect-error a misspelt option is an error, as it is at run time
 mathGen(4, { negative: false })
 // @ts-expect-error a flag is true or false, not the string a query string gives

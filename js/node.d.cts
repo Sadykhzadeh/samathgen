@@ -17,7 +17,7 @@ export interface MathGenOptions {
    *  Default: a random integer in 10..=20, or from half of max up to max
    *  when max is below 20, among those the other options can build; only
    *  when none of them can is a RangeError thrown. */
-  answer?: number | readonly [number, number]
+  answer?: number | readonly [number, number] | null
   /** Ask for a task that groups part of itself in brackets, as in
    *  `(2+3)*4`; the brackets around a negative number do not count, and two
    *  numbers have no room for a group. With `+` alone or `*` alone, where
@@ -33,34 +33,34 @@ export interface MathGenOptions {
    *  RangeError, and so can one of `-` with `/`, or of `+` with `/` without
    *  negatives. Any other string is a RangeError too, and any other value
    *  that is not true or false a TypeError. */
-  brackets?: boolean | 'never'
+  brackets?: boolean | 'never' | null
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. A value that is not true or false throws a TypeError. */
-  quizMode?: boolean
+  quizMode?: boolean | null
   /** The operators the task may use, e.g. `['+', '-']`. Default: all four.
    *  Throws a RangeError for an unknown or empty list, and for the two
    *  combinations that cannot build a task: an answer of 0 without `+` or
    *  `-`, and an answer past half of max either side with `/` alone. */
-  operators?: readonly Operators[]
+  operators?: readonly Operators[] | null
   /** Set to false to keep every number, every quiz option and every step of
    *  working the task out left to right at 0 or above. A RangeError is then
    *  thrown for a negative answer, an answer of 0 without `-`, `+` alone
    *  with an answer smaller than the length, and an answer of max itself
    *  with neither `+` nor `*`. A value that is not true or false, such as the
    *  string 'false', throws a TypeError. Default: true. */
-  negatives?: boolean
+  negatives?: boolean | null
   /** How far from zero any number may be: every number in the task, every
    *  step of working it out left to right and every quiz option. A whole
    *  number from 10 to 10000; anything else throws a RangeError (or a
    *  TypeError for a value that is not a number). It also bounds the
    *  answer, which without one is drawn from half of max up to max when max
    *  is below 20. Default: 10000. */
-  max?: number
+  max?: number | null
   /** Pin the generator, so the same seed gives the same task: a whole number
    *  from 0 to Number.MAX_SAFE_INTEGER. Anything else throws a RangeError
    *  (or a TypeError for a value that is not a finite number) rather than
    *  being ignored. Default: drawn from Math.random. */
-  seed?: number
+  seed?: number | null
 }
 
 export interface MathGenResult {
@@ -89,7 +89,7 @@ export interface MathGenBatchOptions extends MathGenOptions {
    *  kept only once 16 of those in a row repeat too, as when the options
    *  allow fewer tasks than `count`. A value that is not true or false
    *  throws a TypeError. Default: false. */
-  distinct?: boolean
+  distinct?: boolean | null
 }
 
 /**
