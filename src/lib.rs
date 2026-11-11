@@ -30,11 +30,11 @@ const WITHOUT_UNITS_RESTARTS: usize = 1;
 
 /// How many trees are grown, in all, by each of the two searches made once the
 /// usual one has refused a request: one for tasks without a factor of 1 and
-/// one with. Some chains, such as `/` alone within 10 without brackets, grow
-/// into a corner in all but a few tries, so the usual 64 restarts refused a
-/// buildable request for one seed in seven. Those seeds get this many more
-/// growths, shared by the answers on offer, which at most about doubles the
-/// time a refusal takes.
+/// one with. Some tasks without brackets, such as four numbers of `+` and `/`
+/// that make 1 within 10 without negatives, grow into a corner in all but a
+/// few tries, so the usual 64 restarts refuse a buildable request for one
+/// seed in six. Those seeds get this many more growths, shared by the answers
+/// on offer, which at most about doubles the time a refusal takes.
 const FALLBACK_GROWTHS: usize = 1024;
 
 /// How many answers of a range are tried before the request is refused: all
@@ -372,10 +372,10 @@ impl Request {
 /// wait.
 ///
 /// An answer that runs short of room is grown again up to `restarts` times,
-/// which for 32 terms of `-` without brackets or negatives takes a couple of
-/// milliseconds before it gives up. Its neighbours mostly run short too, so
-/// the ones drawn after it get an eighth of that, or a refusal would take
-/// eleven times as long.
+/// which for 32 terms of `+` and `/` without brackets or negatives takes a
+/// millisecond or two before it gives up. Its neighbours mostly run short
+/// too, so the ones drawn after it get an eighth of that, or a refusal would
+/// take eleven times as long.
 fn grow_for_some_answer(
     (low, high): (i64, i64),
     config: impl Fn(i64) -> Config,

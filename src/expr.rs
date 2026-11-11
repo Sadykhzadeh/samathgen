@@ -236,11 +236,13 @@ impl Expr {
 
     /// `room` is the operators the subtree at `at` may be split by where it
     /// stands, which is all of them unless the task is to have no brackets.
+    /// `to_come` is as for `try_split`.
     fn split_nth_leaf(
         &mut self,
         at: u8,
         index: &mut usize,
         room: Ops,
+        to_come: i64,
         config: &Config,
         rng: &mut Rng,
     ) -> Visit {
@@ -250,7 +252,7 @@ impl Expr {
                     *index -= 1;
                     return Visit::Missed;
                 }
-                match split_value(current, config.ops.and(room), config, rng) {
+                match split_value(current, config.ops.and(room), to_come, config, rng) {
                     Some((left, op, right)) => {
                         let left = self.push(Node::Num(left));
                         let right = self.push(Node::Num(right));
@@ -268,9 +270,9 @@ impl Expr {
                     (room, room)
                 };
                 let right_was_leaf = matches!(self.nodes[right as usize], Node::Num(_));
-                match self.split_nth_leaf(left, index, left_room, config, rng) {
+                match self.split_nth_leaf(left, index, left_room, to_come, config, rng) {
                     Visit::Missed => match self
-                        .split_nth_leaf(right, index, right_room, config, rng)
+                        .split_nth_leaf(right, index, right_room, to_come, config, rng)
                     {
                         Visit::Split if config.flat && right_was_leaf => self.lean_left(at, config),
                         reached => reached,
@@ -533,7 +535,13 @@ fn split_candidates(value: i64, ops: Ops, config: &Config) -> ([Op; 4], usize, b
 
 /// Picks `(a, op, b)` such that `a op b == value` exactly, with `op` one of
 /// `ops`, or `None` when this value cannot be split within the bounds above.
-fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+fn split_value(
+    value: i64,
+    ops: Ops,
+    to_come: i64,
+    config: &Config,
+    rng: &mut Rng,
+) -> Option<(i64, Op, i64)> {
     let (mut candidates, count, only_units) = split_candidates(value, ops, config);
     let candidates = &mut candidates[..count];
     rng.shuffle(candidates);
@@ -543,7 +551,7 @@ fn split_value(value: i64, ops: Ops, config: &Config, rng: &mut Rng) -> Option<(
         }
     }
     for &op in candidates.iter() {
-        if let Some(split) = try_split(value, op, config, rng) {
+        if let Some(split) = try_split(value, op, to_come, config, rng) {
             return Some(split);
         }
     }
@@ -564,7 +572,18 @@ fn occasionally_negative(rng: &mut Rng) -> i64 {
     }
 }
 
-fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64, Op, i64)> {
+/// `to_come` is how many splits follow this one in a task that is one chain,
+/// and 0 in any other. A chain is only ever split at its first number, which
+/// each split makes bigger, so this one has to leave the rest their room:
+/// drawn as if it were the last, 20-9 would be the end of a chain within 20
+/// that 20-1-1-1 could still have been.
+fn try_split(
+    value: i64,
+    op: Op,
+    to_come: i64,
+    config: &Config,
+    rng: &mut Rng,
+) -> Option<(i64, Op, i64)> {
     let negatives = config.negatives;
     // The sign that keeps an operand on the same side of zero as the value
     // it came from.
@@ -611,9 +630,10 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
             Op::Sub => {
                 let sign = flip(rng);
                 // Going the value's own way the left operand is the value
-                // and the right added.
+                // and the right added, and in a chain every number still to
+                // come is added to it as well, each 1 at the least.
                 let room = if sign > 0 {
-                    config.max - value.abs()
+                    config.max - value.abs() - to_come
                 } else {
                     config.max
                 };
@@ -626,8 +646,10 @@ fn try_split(value: i64, op: Op, config: &Config, rng: &mut Rng) -> Option<(i64,
             }
             Op::Mul => return try_split_product(value, config, rng),
             Op::Div => {
-                // The left operand is the value times the right.
-                let most = DIVISOR_MAX.min(config.max / value.abs().max(1));
+                // The left operand is the value times the right, and in a
+                // chain times every divisor still to come as well, each 2
+                // at the least.
+                let most = DIVISOR_MAX.min(config.max / (value.abs().max(1) << to_come));
                 if most < DIVISOR_MIN {
                     return None;
                 }
@@ -710,10 +732,20 @@ pub const RESTARTS: usize = 64;
 /// split was missed every time is under one in ten million.
 const MISSES_PER_LEAF: usize = 16;
 
+/// Whether the task is one chain from left to right, which only its first
+/// number can be split to make longer: without brackets, `/` alone, or `-`
+/// alone without negatives.
+fn one_chain(config: &Config) -> bool {
+    config.flat
+        && (config.ops == Ops(Op::Div.bit())
+            || (!config.negatives && config.ops == Ops(Op::Sub.bit())))
+}
+
 /// Grows a tree towards `wanted` leaves for the answer, and says how many
 /// it reached: fewer when it got stuck.
 fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     let mut expr = Expr::leaf(config.answer, wanted);
+    let chain = one_chain(config);
     // Counted as it grows rather than walked for on every step.
     let mut leaves = 1;
     // A leaf is picked at random, so a tree where none can be split is only
@@ -722,7 +754,14 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     let mut misses = 0;
     while leaves < wanted && misses < leaves * MISSES_PER_LEAF {
         let mut index = rng.below(leaves as u64) as usize;
-        if let Visit::Split = expr.split_nth_leaf(expr.root, &mut index, Ops::ALL, config, rng) {
+        let to_come = if chain {
+            (wanted - leaves - 1) as i64
+        } else {
+            0
+        };
+        if let Visit::Split =
+            expr.split_nth_leaf(expr.root, &mut index, Ops::ALL, to_come, config, rng)
+        {
             leaves += 1;
             misses = 0;
         } else {
@@ -1299,18 +1338,16 @@ mod tests {
         // Without brackets `/` alone, and `-` alone without negatives, is one
         // chain from left to right whose first number is the answer times or
         // plus every number after it, so a long one passes max and is always
-        // refused. These, `-` with `/`, and `+` with `/` without negatives,
-        // can run short of room before that. Every other set builds what it
-        // builds with brackets, at every length and for every seed.
+        // refused. `-` with `/`, and `+` with `/` without negatives, can run
+        // short of room. Every other set builds what it builds with
+        // brackets, at every length and for every seed.
         for max in [10_i64, 20, 100, MAX_ABS] {
             for bits in 1..=15 {
                 let ops = Ops::from_bits(bits).unwrap();
                 let only = |op: Op| ops == Ops::from_bits(1 << op as u32).unwrap();
                 let pair = |a: Op, b: Op| ops == Ops(a.bit() | b.bit());
                 for negatives in [true, false] {
-                    let short = only(Op::Div)
-                        || pair(Op::Sub, Op::Div)
-                        || (!negatives && (only(Op::Sub) || pair(Op::Add, Op::Div)));
+                    let short = pair(Op::Sub, Op::Div) || (!negatives && pair(Op::Add, Op::Div));
                     for answer in [
                         -max,
                         -max / 2 - 1,
@@ -1384,6 +1421,84 @@ mod tests {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_chain_is_built_whenever_its_first_number_fits_the_max() {
+        // 9728/2/2/2/2/2/2/2/2/2 is the one chain of ten numbers that makes
+        // 19, and 20-1-1-1-1-1-1-1-1-1 the one that makes 11 within 20. A
+        // divisor of 3 anywhere, or a 2 taken away, and the first number
+        // can no longer be reached: drawn without a thought for the numbers
+        // still to come, these were refused for nearly every seed.
+        let chains = [(Op::Div, true), (Op::Div, false), (Op::Sub, false)];
+        for (op, negatives) in chains {
+            for max in [10_i64, 20, 100, 1000, MAX_ABS] {
+                for length in 2..=32 {
+                    let rest = length as i64 - 1;
+                    // The furthest answer whose first number is within max.
+                    let last = match op {
+                        Op::Div => max >> rest,
+                        _ => max - rest,
+                    };
+                    for answer in [
+                        -last,
+                        -last / 2,
+                        -1,
+                        0,
+                        1,
+                        2,
+                        3,
+                        7,
+                        12,
+                        19,
+                        last / 2,
+                        last - 1,
+                        last,
+                        last + 1,
+                        max,
+                    ] {
+                        if answer.abs() > max {
+                            continue;
+                        }
+                        let impossible = match op {
+                            Op::Div => answer == 0 || answer.abs() > last,
+                            _ => answer > last,
+                        } || (!negatives && answer < 0);
+                        for seed in 0..16 {
+                            let config = Config {
+                                answer,
+                                length,
+                                brackets: false,
+                                ops: Ops(op.bit()),
+                                negatives,
+                                max,
+                                flat: true,
+                                units: true,
+                            };
+                            let mut tokens = Vec::new();
+                            let built = generate(&config, &mut Rng::new(seed), &mut tokens);
+                            let what = format!(
+                                "answer {answer}, length {length}, {op:?}, \
+                                 negatives {negatives}, max {max}, seed {seed}"
+                            );
+                            let Some(expr) = built else {
+                                assert!(impossible, "refused {what}");
+                                continue;
+                            };
+                            assert!(!impossible, "built {what}");
+                            let text = render(&tokens);
+                            assert!(!has_group(&tokens), "{text} for {what}");
+                            assert_eq!(expr.leaf_count(), length, "{text} for {what}");
+                            let (value, lowest, highest) = Parser::parse_with_steps(&tokens);
+                            assert_eq!(value, answer, "{text} for {what}");
+                            let floor = if negatives { -max } else { 0 };
+                            assert!(lowest >= floor, "{text} goes down to {lowest} for {what}");
+                            assert!(highest <= max, "{text} goes up to {highest} for {what}");
                         }
                     }
                 }
@@ -1640,7 +1755,7 @@ mod tests {
                 (2, Op::Sub, 10),
                 (10, Op::Add, 10),
             ] {
-                let (left, _, right) = try_split(value, op, &config(max), &mut rng)
+                let (left, _, right) = try_split(value, op, 0, &config(max), &mut rng)
                     .unwrap_or_else(|| panic!("{value} by {op:?} within {max}, seed {seed}"));
                 assert_eq!(op.apply(left, right), value);
                 assert!(left.abs() <= max && right.abs() <= max);
