@@ -1054,8 +1054,8 @@ mod tests {
 
     #[test]
     fn under_a_small_max_the_answer_and_options_fit_it() {
-        for max in 10..=25 {
-            let low = if max >= 20 { 10 } else { (max + 1) / 2 };
+        for max in 10u32..=25 {
+            let low = if max >= 20 { 10 } else { max.div_ceil(2) };
             let high = max.min(20);
             let mut drawn = std::collections::BTreeSet::new();
             for seed in 0..400 {
