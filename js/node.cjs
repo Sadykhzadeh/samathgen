@@ -47,7 +47,9 @@ const decode = (data, start) => {
   return { task, answer: data[start], quizOptions }
 }
 
-const drawSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+// Leaves room for the seeds after it, so a drawn batch never runs past the
+// largest seed mathGen accepts.
+const drawSeed = (count) => Math.floor(Math.random() * (Number.MAX_SAFE_INTEGER - count + 1))
 
 const clampLength = (length) => {
   if (length !== undefined && length !== null && typeof length !== 'number') {
@@ -237,14 +239,20 @@ const cannotBuild = (length, answers, max, options) => {
 }
 
 // Task i of a batch is the task for seed + i, which only holds for whole
-// numbers that JavaScript can count up from exactly.
-const readSeed = (seed) => {
-  if (seed === undefined || seed === null) return drawSeed()
+// numbers that JavaScript can count up from exactly, and for a last seed
+// that mathGen would accept.
+const readSeed = (seed, count) => {
+  if (seed === undefined || seed === null) return drawSeed(count)
   if (typeof seed !== 'number' || !Number.isFinite(seed)) {
     throw new TypeError(`seed must be a finite number, got ${typeof seed === 'number' ? seed : typeof seed}`)
   }
   if (!Number.isSafeInteger(seed) || seed < 0) {
     throw new RangeError(`seed must be a whole number from 0 to ${Number.MAX_SAFE_INTEGER}, got ${seed}`)
+  }
+  // Compared as a difference: seed + count can round past 2^53 before the
+  // count is taken off again.
+  if (seed > Number.MAX_SAFE_INTEGER - count + 1) {
+    throw new RangeError(`a batch of ${count} from seed ${seed} runs past the largest seed, ${Number.MAX_SAFE_INTEGER}`)
   }
   return seed
 }
@@ -261,7 +269,7 @@ const mathGen = (length, more) => {
   const max = readMax(options.max)
   const answers = readAnswers(options.answer, max)
   const allowed = readAllowed(options, answers)
-  const seed = readSeed(options.seed)
+  const seed = readSeed(options.seed, 1)
 
   const at = read(generate(
     clampLength(length),
@@ -293,7 +301,7 @@ const mathGenBatch = (count, length, more) => {
   const max = readMax(options.max)
   const answers = readAnswers(options.answer, max)
   const allowed = readAllowed(options, answers)
-  const seed = readSeed(options.seed)
+  const seed = readSeed(options.seed, count)
 
   const at = read(generateBatch(
     count,

@@ -183,6 +183,17 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('a batch whose last task would need a seed past 2^53-1 is refused', () => {
+    // Task i is the task for seed + i, and mathGen refuses seeds past the
+    // limit, so a batch cannot hand out tasks for them either.
+    const last = Number.MAX_SAFE_INTEGER
+    assert.equal(mathGenBatch(2, 4, { seed: last - 1 }).length, 2)
+    assert.deepEqual(mathGenBatch(1, 4, { seed: last }), [mathGen(4, { seed: last })])
+    assert.deepEqual(mathGenBatch(0, 4, { seed: last }), [])
+    assert.throws(() => mathGenBatch(3, 4, { seed: last - 1 }), RangeError)
+    assert.throws(() => mathGenBatch(2, 4, { seed: last }), RangeError)
+  })
+
   check('without an answer one is drawn from 10..20', () => {
     for (let seed = 1; seed <= 2000; seed++) {
       const { answer } = mathGen(3, { seed })
