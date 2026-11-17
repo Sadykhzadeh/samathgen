@@ -303,20 +303,31 @@ const mathGenBatch = (count, length, more) => {
   const allowed = readAllowed(options, answers)
   const seed = readSeed(options.seed, count)
 
-  const at = read(generateBatch(
+  const quizMode = readFlag('quizMode', options.quizMode, false)
+  const distinct = readFlag('distinct', options.distinct, false)
+  const build = (withDistinct) => read(generateBatch(
     count,
     clampLength(length),
     answers === undefined ? 0 : answers[0],
     answers === undefined ? 0 : answers[1],
     answers !== undefined,
     options.brackets === true,
-    readFlag('quizMode', options.quizMode, false),
+    quizMode,
     allowed,
     max,
     seed,
-    readFlag('distinct', options.distinct, false)
+    withDistinct
   ))
-  if (ints[at] === 0 && count > 0) throw cannotBuild(length, answers, max, options)
+  const at = build(distinct)
+  if (ints[at] === 0 && count > 0) {
+    // Only a repeat that would be drawn past the last seed fails a distinct
+    // batch that builds without `distinct`.
+    const plain = build(false)
+    if (distinct && ints[plain] !== 0) {
+      throw new RangeError(`a distinct batch of ${count} from seed ${seed} would need a repeat's seed past the largest seed, ${Number.MAX_SAFE_INTEGER}`)
+    }
+    throw cannotBuild(length, answers, max, options)
+  }
   const tasks = new Array(count)
   let next = at + 1
   for (let i = 0; i < count; i++) {

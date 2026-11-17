@@ -235,7 +235,9 @@ give, so one seed reproduces the whole batch, and the third task of a
 worksheet can be regenerated on its own. Without a `seed` one is drawn, as for
 `mathGen`. The last task's seed has to be one `mathGen` accepts, so a batch
 that would run past `Number.MAX_SAFE_INTEGER` is a `RangeError`, and an
-unseeded batch draws a seed with room for all of its tasks.
+unseeded batch draws a seed with room for all of its tasks. The repeats that
+`distinct` draws come from the seeds after the batch's own, so one of those
+past the limit is refused the same way.
 
 `count` must be a whole number from `0` to `10000`; anything else is a
 `RangeError`. Past that a batch stops being small, and a count taken from a

@@ -194,6 +194,19 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGenBatch(2, 4, { seed: last }), RangeError)
   })
 
+  check('a distinct batch whose repeats would need a seed past 2^53-1 is refused', () => {
+    // Only two numbers of * make 42 tasks, so a batch of 20 repeats, and its
+    // repeats are drawn from the seeds after the batch's own: past the last
+    // seed here.
+    const last = Number.MAX_SAFE_INTEGER
+    const pool = { operators: ['*'], distinct: true }
+    // Its own seeds end on the last one, so the first repeat would draw past it.
+    assert.throws(() => mathGenBatch(20, 2, { ...pool, seed: last - 19 }), RangeError)
+    assert.throws(() => mathGenBatch(20, 2, { ...pool, seed: last - 25 }), RangeError)
+    assert.equal(mathGenBatch(20, 2, { operators: ['*'], seed: last - 19 }).length, 20)
+    assert.deepEqual(mathGenBatch(1, 4, { distinct: true, seed: last }), [mathGen(4, { seed: last })])
+  })
+
   check('without an answer one is drawn from 10..20', () => {
     for (let seed = 1; seed <= 2000; seed++) {
       const { answer } = mathGen(3, { seed })

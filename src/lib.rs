@@ -257,6 +257,9 @@ fn fill_batch(
         }
         let mut tries = 0;
         while !seen.insert(&tokens) && tries < DISTINCT_TRIES {
+            if spare > LAST_SEED {
+                return false;
+            }
             out.truncate(start);
             if !write_task(out, &mut tokens, &request, spare) {
                 return false;
@@ -273,6 +276,10 @@ fn fill_batch(
 /// while a draw is as likely to be new as not, sixteen repeats in a row
 /// come once in 65 536.
 const DISTINCT_TRIES: u32 = 16;
+
+/// The largest seed the JavaScript wrappers accept, Number.MAX_SAFE_INTEGER.
+/// A repeat drawn past it has no seed that `mathGen` could be asked for.
+const LAST_SEED: u64 = (1 << 53) - 1;
 
 /// The tasks a batch holds so far, kept as 64-bit hashes of their tokens
 /// in an open-addressed table. Two different tasks sharing a hash would
