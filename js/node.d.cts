@@ -30,9 +30,9 @@ export interface MathGenOptions {
    *  `'never'` builds a task that groups nothing, as `12-5-3` rather than
    *  `12-(5+3)`; a negative number still carries its own brackets. A long
    *  task of `/` alone, or of `-` alone without negatives, then throws a
-   *  RangeError, and so can one of `-` with `/`, or of `+` with `/` without
-   *  negatives. Any other string is a RangeError too, and any other value
-   *  that is not true or false a TypeError. */
+   *  RangeError, and so does one of `+`, `-` and `/` without negatives that
+   *  none of the answers on offer can build. Any other string is a RangeError
+   *  too, and any other value that is not true or false a TypeError. */
   brackets?: boolean | 'never' | null
   /** Fill `quizOptions` with the answer and three near misses, each within
    *  5 of it. A value that is not true or false throws a TypeError. */
