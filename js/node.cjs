@@ -270,6 +270,8 @@ const mathGen = (length, more) => {
   const answers = readAnswers(options.answer, max)
   const allowed = readAllowed(options, answers)
   const seed = readSeed(options.seed, 1)
+  // A single task has no use for distinct, but a value that is not a flag is refused as it is in a batch.
+  readFlag('distinct', options.distinct, false)
 
   const at = read(generate(
     clampLength(length),

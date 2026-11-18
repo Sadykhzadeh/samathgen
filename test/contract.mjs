@@ -531,6 +531,7 @@ const suite = (mathGen, mathGenBatch) => {
     }
     for (const value of ['false', 0, 1, {}]) {
       assert.throws(() => mathGenBatch(2, 4, { distinct: value, seed: 1 }), /distinct must be true or false, got/, String(value))
+      assert.throws(() => mathGen(4, { distinct: value, seed: 1 }), /distinct must be true or false, got/, String(value))
     }
     assert.throws(() => mathGen(4, { negatives: 'false' }), /negatives must be true or false, got "false"/)
     assert.throws(() => mathGen(4, { negatives: 0 }), /negatives must be true or false, got 0$/)
