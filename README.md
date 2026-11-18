@@ -220,8 +220,8 @@ alone no grouping changes the value, so a group is not looked for, and a
 task only has one where it keeps a step within `max`. Otherwise the task is
 drawn again until it has a group, and comes without one after 24 tries. That
 is rare except for three numbers of `+` and `/` under a small `max`: within
-20, `(a+b)/c` and `a/(b+c)` make at most 10, so 60% of such tasks have no
-group, and 92% without negatives.
+20, `(a+b)/c` and `a/(b+c)` make at most 10, so 52% of such tasks have no
+group, and 91% without negatives.
 
 ### `mathGenBatch(count, length, more?)`
 
