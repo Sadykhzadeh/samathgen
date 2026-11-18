@@ -599,9 +599,11 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     // Only a request the usual search refuses is searched again, within a
     // budget of growths, so a seed that gave a task before gives the same
     // one now. One that is refused again is searched once more, with each
-    // answer given its share of the budget.
+    // answer given its share of the budget. A flat task of `+`, `-` and `/`
+    // that is still refused is worked out exactly, see `expr::flat_chains`.
     .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, false))
-    .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, true));
+    .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, true))
+    .or_else(|| expr::flat_chains(&config(low, true), (low, high), &mut rng, tokens));
     let Some((answer, expression)) = found else {
         return false;
     };

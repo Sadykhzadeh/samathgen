@@ -878,8 +878,9 @@ pub fn generate_within(
 ///
 /// Without brackets, a task of `/` alone, or of `-` alone without
 /// negatives, is one chain whose first number grows with every term, and
-/// past a few terms it cannot be built. `-` with `/`, and `+` with `/`
-/// without negatives, run short of room too, sooner under a small max.
+/// past a few terms it cannot be built. Without brackets and negatives the
+/// growth can also run short of room on `-` with `/`, or `+` with `/`, sooner
+/// under a small max; `flat_chains` builds what it refuses.
 ///
 /// Without `units`, `None` also for a number that only `1*p` can bring to
 /// the length asked for, as an answer of 13 for two numbers of `*` alone.
@@ -924,6 +925,268 @@ pub fn generate_with(
 
     // `tokens` still holds the last attempt, which is the one returned.
     last
+}
+
+/// Which numbers a chain of `m` numbers can be worked out to, for each `m`:
+/// `values[m][v]` is set when `v` is a number within `max` that `m` numbers
+/// divided one after another by divisors from `DIVISOR_MIN` to `DIVISOR_MAX`
+/// make, every division exact. Without `/` only a single number is a chain.
+fn chain_values(length: usize, max: i64, divide: bool) -> Vec<Vec<bool>> {
+    let top = DIVISOR_MAX.min(max);
+    let mut values = vec![vec![false; max as usize + 1]; length + 1];
+    values[1][1..].fill(true);
+    for m in 2..=length {
+        for w in 1..=max {
+            if !divide || !values[m - 1][w as usize] {
+                continue;
+            }
+            for d in DIVISOR_MIN..=top {
+                if w % d == 0 {
+                    values[m][(w / d) as usize] = true;
+                }
+            }
+        }
+    }
+    values
+}
+
+/// Sets the bits from `from` up to `to`, not included.
+fn set_range(bits: &mut [u64], from: usize, to: usize) {
+    for (k, word) in bits.iter_mut().enumerate() {
+        let start = k * 64;
+        let (a, b) = (from.max(start), to.min(start + 64));
+        if a < b {
+            *word |= (u64::MAX >> (64 - (b - a))) << (a - start);
+        }
+    }
+}
+
+/// Clears every bit at `end` or above.
+fn truncate(bits: &mut [u64], end: usize) {
+    for (k, word) in bits.iter_mut().enumerate() {
+        let start = k * 64;
+        if end <= start {
+            *word = 0;
+        } else if end < start + 64 {
+            *word &= (1 << (end - start)) - 1;
+        }
+    }
+}
+
+/// The lowest bit set in `bits`, if any.
+fn lowest(bits: &[u64]) -> Option<usize> {
+    bits.iter()
+        .enumerate()
+        .find(|(_, &word)| word != 0)
+        .map(|(k, &word)| k * 64 + word.trailing_zeros() as usize)
+}
+
+/// The highest bit set in `bits`, if any.
+fn highest(bits: &[u64]) -> Option<usize> {
+    bits.iter()
+        .enumerate()
+        .rev()
+        .find(|(_, &word)| word != 0)
+        .map(|(k, &word)| k * 64 + 63 - word.leading_zeros() as usize)
+}
+
+/// Sets in `into` every `r - t` for a bit `r` of `from` that is `t` or more.
+fn subtract_into(into: &mut [u64], from: &[u64], t: usize) {
+    let (words, bits) = (t / 64, t % 64);
+    for (k, slot) in into.iter_mut().enumerate() {
+        let low = from.get(k + words).copied().unwrap_or(0);
+        let high = from.get(k + words + 1).copied().unwrap_or(0);
+        *slot |= if bits == 0 {
+            low
+        } else {
+            (low >> bits) | (high << (64 - bits))
+        };
+    }
+}
+
+/// Sets in `into` every `r + t` for a bit `r` of `from`. Bits past the top
+/// of `into` are dropped.
+fn add_into(into: &mut [u64], from: &[u64], t: usize) {
+    let (words, bits) = (t / 64, t % 64);
+    for (k, slot) in into.iter_mut().enumerate().skip(words) {
+        let near = from[k - words];
+        let far = if k > words { from[k - words - 1] } else { 0 };
+        *slot |= if bits == 0 {
+            near
+        } else {
+            (near << bits) | (far >> (64 - bits))
+        };
+    }
+}
+
+/// The first number and the divisors of a chain of `m` numbers that works
+/// out to `value`, in the order they are written.
+fn divide_chain(
+    m: usize,
+    value: i64,
+    values: &[Vec<bool>],
+    max: i64,
+    rng: &mut Rng,
+) -> (i64, Vec<i64>) {
+    let top = DIVISOR_MAX.min(max);
+    let (mut m, mut value) = (m, value);
+    let mut divisors = Vec::new();
+    while m > 1 {
+        let options: Vec<i64> = (DIVISOR_MIN..=top)
+            .filter(|&d| value * d <= max && values[m - 1][(value * d) as usize])
+            .collect();
+        let d = *rng.pick(&options);
+        divisors.push(d);
+        value *= d;
+        m -= 1;
+    }
+    divisors.reverse();
+    (value, divisors)
+}
+
+impl Expr {
+    /// A chain of `first` divided by each of `divisors` in turn, pushed onto
+    /// the vector. Returns its root.
+    fn chain(&mut self, first: i64, divisors: &[i64]) -> u8 {
+        let mut at = self.push(Node::Num(first));
+        for &divisor in divisors {
+            let right = self.push(Node::Num(divisor));
+            at = self.push(Node::Binary {
+                op: Op::Div,
+                left: at,
+                right,
+            });
+        }
+        at
+    }
+}
+
+/// A flat task of `+`, `-` and `/` without negative numbers is a run of
+/// chains joined by `+` and `-`: `a/b-c+d/e/f` is the chain `a/b`, then `c`
+/// taken off, then the chain `d/e/f` put on. Each step is worked out from
+/// the left with every division exact and every running result from 0 to
+/// `max`. Growing a tree corners itself on such a task too often when `max`
+/// is small, so the answers are worked out exactly instead: `ends[n]` holds
+/// the running results that a task of `n` numbers can finish on.
+///
+/// For an answer from `low` to `high` it returns a task drawn uniformly
+/// among those it can build, or `None` when none can be built. A set with
+/// `*` is left to the growth, and it is only asked after the growth has
+/// refused, so every other task keeps its seed.
+pub fn flat_chains(
+    config: &Config,
+    (low, high): (i64, i64),
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+) -> Option<(i64, Expr)> {
+    if !config.flat || config.negatives || config.ops.has(Op::Mul) {
+        return None;
+    }
+    let (length, max) = (config.length.clamp(2, 32), config.max);
+    let (adds, subtracts) = (config.ops.has(Op::Add), config.ops.has(Op::Sub));
+    let low = low.max(0);
+    if low > high {
+        return None;
+    }
+    let values = chain_values(length, max, config.ops.has(Op::Div));
+    let words = max as usize / 64 + 1;
+    let mut ends: Vec<Vec<u64>> = vec![vec![0; words]; length + 1];
+    for n in 1..=length {
+        let mut set = vec![0u64; words];
+        for (v, _) in values[n].iter().enumerate().filter(|(_, &on)| on) {
+            set[v / 64] |= 1 << (v % 64);
+        }
+        // A single number can be any of 1..=max, so after one more number,
+        // with `-`, a running result reaches every number below the highest
+        // before it, and with `+` every number above the lowest, up to max.
+        if let Some(top) = highest(&ends[n - 1]) {
+            if subtracts {
+                set_range(&mut set, 0, top);
+            }
+        }
+        if let Some(bottom) = lowest(&ends[n - 1]) {
+            if adds {
+                set_range(&mut set, bottom + 1, max as usize + 1);
+            }
+        }
+        for m in 2..n {
+            for (t, _) in values[m].iter().enumerate().filter(|(_, &on)| on) {
+                if adds {
+                    add_into(&mut set, &ends[n - m], t);
+                }
+                if subtracts {
+                    subtract_into(&mut set, &ends[n - m], t);
+                }
+            }
+        }
+        truncate(&mut set, max as usize + 1);
+        ends[n] = set;
+    }
+    let reached = |bits: &[u64], v: usize| bits[v / 64] >> (v % 64) & 1 == 1;
+
+    let candidates: Vec<i64> = (low..=high)
+        .filter(|&v| reached(&ends[length], v as usize))
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    let answer = *rng.pick(&candidates);
+
+    // Read from the end: each step takes a chain of `m` numbers off a running
+    // result, or puts one on, from a result that `n - m` numbers can reach,
+    // until a single chain is left.
+    let mut joined = Vec::new();
+    let (mut n, mut v) = (length, answer as usize);
+    let (first_length, first_value) = loop {
+        let mut options: Vec<Option<(Op, usize, usize)>> = Vec::new();
+        if values[n][v] {
+            options.push(None);
+        }
+        for m in 1..n {
+            for (t, _) in values[m]
+                .iter()
+                .enumerate()
+                .take(max as usize + 1)
+                .skip(1)
+                .filter(|(_, &on)| on)
+            {
+                if adds && t <= v && reached(&ends[n - m], v - t) {
+                    options.push(Some((Op::Add, m, t)));
+                }
+                if subtracts && v + t <= max as usize && reached(&ends[n - m], v + t) {
+                    options.push(Some((Op::Sub, m, t)));
+                }
+            }
+        }
+        match *rng.pick(&options) {
+            None => break (n, v),
+            Some((op, m, t)) => {
+                joined.push((op, m, t));
+                n -= m;
+                v = if op == Op::Add { v - t } else { v + t };
+            }
+        }
+    };
+
+    let mut expr = Expr {
+        nodes: Vec::with_capacity(2 * length - 1),
+        root: 0,
+    };
+    let (first, divisors) = divide_chain(first_length, first_value as i64, &values, max, rng);
+    let mut root = expr.chain(first, &divisors);
+    for &(op, m, t) in joined.iter().rev() {
+        let (first, divisors) = divide_chain(m, t as i64, &values, max, rng);
+        let right = expr.chain(first, &divisors);
+        root = expr.push(Node::Binary {
+            op,
+            left: root,
+            right,
+        });
+    }
+    expr.root = root;
+    tokens.clear();
+    expr.write(tokens, 0, max);
+    Some((answer, expr))
 }
 
 #[cfg(test)]
@@ -1230,6 +1493,108 @@ mod tests {
         }
     }
 
+    /// What `numbers` make when joined by `gaps`, worked out from the left as
+    /// a pupil would: `/` binds tighter than `+` and `-`. `None` when a
+    /// division is not exact or by a number from 2 to 10, or a running
+    /// result leaves 0 to 10.
+    fn flat_value(numbers: &[i64], gaps: &[Op]) -> Option<i64> {
+        let within = |v: i64| (0..=10).contains(&v).then_some(v);
+        let (mut running, mut sign, mut term) = (0, Op::Add, numbers[0]);
+        for (&number, &gap) in numbers[1..].iter().zip(gaps) {
+            match gap {
+                Op::Div => {
+                    if !(2..=10).contains(&number) || term % number != 0 {
+                        return None;
+                    }
+                    term /= number;
+                }
+                _ => {
+                    running = within(if sign == Op::Sub {
+                        running - term
+                    } else {
+                        running + term
+                    })?;
+                    (sign, term) = (gap, number);
+                }
+            }
+        }
+        within(if sign == Op::Sub {
+            running - term
+        } else {
+            running + term
+        })
+    }
+
+    #[test]
+    fn flat_chains_builds_exactly_what_the_flat_tasks_make() {
+        let joins = [Op::Add, Op::Sub, Op::Div];
+        for bits in 1..8usize {
+            let allowed: Vec<Op> = joins
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| bits >> i & 1 == 1)
+                .map(|(_, &op)| op)
+                .collect();
+            let ops =
+                Ops::from_bits(allowed.iter().fold(0, |set, &op| set | 1 << op as u32)).unwrap();
+            for length in 2..=5 {
+                let mut reachable = [false; 11];
+                let mut numbers = vec![1i64; length];
+                loop {
+                    for code in 0..allowed.len().pow(length as u32 - 1) {
+                        let gaps: Vec<Op> = (0..length - 1)
+                            .map(|i| allowed[code / allowed.len().pow(i as u32) % allowed.len()])
+                            .collect();
+                        if let Some(value) = flat_value(&numbers, &gaps) {
+                            reachable[value as usize] = true;
+                        }
+                    }
+                    let mut at = 0;
+                    while at < length && numbers[at] == 10 {
+                        numbers[at] = 1;
+                        at += 1;
+                    }
+                    if at == length {
+                        break;
+                    }
+                    numbers[at] += 1;
+                }
+
+                for answer in 0..=10 {
+                    let config = Config {
+                        answer,
+                        length,
+                        brackets: false,
+                        ops,
+                        negatives: false,
+                        max: 10,
+                        flat: true,
+                        units: true,
+                    };
+                    let mut tokens = Vec::new();
+                    let built =
+                        flat_chains(&config, (answer, answer), &mut Rng::new(1), &mut tokens);
+                    let what = format!("answer {answer}, length {length}, ops {bits:03b}");
+                    assert_eq!(built.is_some(), reachable[answer as usize], "{what}");
+                    let Some((found, expr)) = built else {
+                        continue;
+                    };
+                    assert_eq!(found, answer, "{what}");
+                    assert_eq!(expr.leaf_count(), length, "{what}");
+                    assert_eq!(tokens, expr.tokens(), "{what}");
+                    assert_eq!(Parser::parse(&tokens), answer, "{what}");
+                    for token in &tokens {
+                        match token {
+                            Token::Op(op) => assert!(ops.has(*op), "{op:?} in {what}"),
+                            Token::Num(n) => assert!((1..=10).contains(n), "{n} in {what}"),
+                            _ => panic!("a bracket in a flat task, {what}"),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn without_negatives_nothing_dips_below_zero() {
         let only = |op: Op| Ops::from_bits(1 << op as u32).unwrap();
@@ -1338,9 +1703,10 @@ mod tests {
         // Without brackets `/` alone, and `-` alone without negatives, is one
         // chain from left to right whose first number is the answer times or
         // plus every number after it, so a long one passes max and is always
-        // refused. `-` with `/`, and `+` with `/` without negatives, can run
-        // short of room. Every other set builds what it builds with
-        // brackets, at every length and for every seed.
+        // refused. The growth can run short of room on `-` with `/`, and on
+        // `+` with `/` without negatives, where `flat_chains` builds what it
+        // refuses, so those are not held to it here. Every other set builds
+        // what it builds with brackets, at every length and for every seed.
         for max in [10_i64, 20, 100, MAX_ABS] {
             for bits in 1..=15 {
                 let ops = Ops::from_bits(bits).unwrap();

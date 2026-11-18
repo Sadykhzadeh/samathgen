@@ -565,6 +565,39 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('a flat task of + - and / without negatives is built whenever an answer on offer can be', () => {
+    for (const operators of [['-', '/'], ['+', '/'], ['+', '-', '/']]) {
+      const options = { operators, brackets: 'never', negatives: false, max: 10 }
+      for (let length = 12; length <= 16; length++) {
+        for (let seed = 0; seed < 200; seed++) {
+          const { task, answer } = mathGen(length, { ...options, seed })
+          assert.equal(eval(task.join('')), answer, `${operators.join('')}, length ${length}, seed ${seed}`)
+        }
+      }
+      // The default range for a max of 10 is 5 to 10. Where it is refused no
+      // answer in it can be built, so none of them may be built on its own.
+      for (const length of [14, 20, 32]) {
+        for (let seed = 0; seed < 20; seed++) {
+          let refused = false
+          try {
+            mathGen(length, { ...options, seed })
+          } catch {
+            refused = true
+          }
+          for (let answer = 5; answer <= 10; answer++) {
+            let built = true
+            try {
+              mathGen(length, { ...options, answer, seed })
+            } catch {
+              built = false
+            }
+            assert.ok(!(built && refused), `${operators.join('')}, length ${length}, seed ${seed}: answer ${answer} built but the range refused`)
+          }
+        }
+      }
+    }
+  })
+
   check('negatives: false refuses what it cannot build', () => {
     assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
     assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)

@@ -159,14 +159,13 @@ be:
 - with `negatives: false`, a negative `answer`, `+` alone with an `answer`
   smaller than `length` (every term is at least 1), and an `answer` of
   `max` itself with neither `+` nor `*`;
-- with `brackets: 'never'`, a long task of `/` alone, or of `-` alone
-  without negatives. Each is one chain worked out left to right, whose
-  first number is the answer times, or plus, every number after it, so
-  past a few numbers it passes `max`. `-` with `/`, and `+` with `/`
-  without negatives, can run short of room as well: past about 24
-  numbers, or sooner under a small `max` or for a small `answer`. Any set
-  with `*` in it, or with both `+` and `-`, builds every task without
-  brackets that it builds with them.
+- with `brackets: 'never'` and `negatives: false`, a task of `+`, `-` and
+  `/` that none of the answers on offer can make. Such a set, without `*`,
+  is worked out exactly, so it is refused only in that case. A long task of
+  `/` alone, or of `-` alone, is one chain worked out left to right, whose
+  first number is the answer times, or plus, every number after it, so past
+  a few numbers it passes `max`. Any set with `*` in it, or with both `+`
+  and `-`, builds every task without brackets that it builds with them.
 
 A prime, or a 1, is only a product as `1 * p`, which is no multiplication
 exercise, so a factor of 1 is a last resort. Wherever `+`, `-` or `/` can
@@ -271,6 +270,12 @@ each step replaces some leaf holding `v` with a node that evaluates to exactly
 value whatever shape the tree takes, and the text is produced afterwards with
 brackets placed by precedence.
 
+A flat task of `+`, `-` and `/` without negatives, one with no `*` in it, can
+corner a tree when `max` is small. When the growth refuses such a task, it is
+worked out another way: as a run of chains of `/` joined by `+` and `-`, with a
+table of the running results each length can end on, which says exactly which
+answers can be built and gives one way to build each.
+
 Versions up to 0.1.4 worked the other way round: they spliced a
 sub-expression in place of an operand and printed the result flat, with a
 `genValidOperator` function trying to forbid the operator combinations that
@@ -304,7 +309,7 @@ bench. 0.1.3 is the TypeScript version that npm served before 1.0.0:
 | `mathGenBatch`, 1000 to a call | 0.52 µs | 1.9 million |
 
 A batch crosses the boundary once for all of its tasks, which is most of what
-there is to gain from it now. The WebAssembly is 37 307 bytes, 16 017
+there is to gain from it now. The WebAssembly is 45 096 bytes, 19 637
 gzipped, compiled for speed rather than size.
 
 `npm run bench` prints the figures for your machine, and with
