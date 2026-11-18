@@ -192,7 +192,7 @@ const readOperators = (operators) => {
 const readFlag = (name, value, fallback) => {
   if (value === undefined || value === null) return fallback
   if (typeof value !== 'boolean') {
-    const got = typeof value === 'string' || typeof value === 'number' ? JSON.stringify(value) : typeof value
+    const got = typeof value === 'string' ? JSON.stringify(value) : typeof value === 'number' ? String(value) : typeof value
     throw new TypeError(`${name} must be true or false, got ${got}`)
   }
   return value

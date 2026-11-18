@@ -534,6 +534,8 @@ const suite = (mathGen, mathGenBatch) => {
     }
     assert.throws(() => mathGen(4, { negatives: 'false' }), /negatives must be true or false, got "false"/)
     assert.throws(() => mathGen(4, { negatives: 0 }), /negatives must be true or false, got 0$/)
+    assert.throws(() => mathGen(4, { negatives: NaN }), /negatives must be true or false, got NaN$/)
+    assert.throws(() => mathGen(4, { quizMode: -Infinity }), /quizMode must be true or false, got -Infinity$/)
   })
 
   check('a task that can be built is not refused for want of a lucky seed', () => {
