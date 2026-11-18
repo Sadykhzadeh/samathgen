@@ -121,8 +121,9 @@ is a longer `length` with `brackets: true`.
 
 ### `mathGen(length, more?)`
 
-`length` is how many numbers the task contains, clamped to `2..=32`; one that
-is not a number at all is a `TypeError`.
+`length` is how many numbers the task contains, clamped to `2..=32`. A value
+that is not a number, such as `'6'`, is a `TypeError`; left out, or `null`, it
+is 2.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
