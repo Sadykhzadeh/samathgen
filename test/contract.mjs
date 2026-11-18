@@ -222,6 +222,32 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('the tasks for fixed seeds are the ones this version gives', () => {
+    // A change to the generator that moves any of these changes what a seed
+    // means to everyone who has pinned one, so update the table only when
+    // that change is the point.
+    const pinned = [
+      [mathGen(4, { seed: 1 }), '28-(2*13+(-11))', 13, []],
+      [mathGen(4, { quizMode: true, seed: 2024 }), '((-3)+(-4))*((-12)-(-10))', 14, [16, 13, 14, 18]],
+      [mathGen(5, { brackets: true, seed: 7 }), '(-364)/(2*2)/((-2)+(-5))', 13, []],
+      [mathGen(3, { max: 20, seed: 11 }), '(-2)+(-3)-(-19)', 14, []],
+      [mathGen(3, { operators: ['+', '-'], negatives: false, max: 20, brackets: 'never', seed: 42 }), '6+2+10', 18, []],
+      [mathGen(8, { answer: [50, 100], max: 100, seed: 99 }), '(44+(-2)*((-2)+(-9)))/((-4)-((-7)+1))+30', 63, []],
+      [mathGen(14, { operators: ['-', '/'], negatives: false, max: 10, brackets: 'never', seed: 0 }), '10-10/2/5-8/2/2/2-10/2/5-10/2/5', 6, []],
+      [mathGen(16, { operators: ['+', '/'], negatives: false, max: 10, brackets: 'never', seed: 3 }), '10/5+9/9+8/4/2+6/6+7/7+8/8+8/2/2', 9, []],
+    ]
+    pinned.forEach(([result, task, answer, options], i) => {
+      assert.equal(result.task.join(''), task, `pinned task ${i}`)
+      assert.equal(result.answer, answer, `pinned answer ${i}`)
+      assert.deepEqual(result.quizOptions, options, `pinned options ${i}`)
+    })
+    const batch = mathGenBatch(3, 2, { operators: ['*'], seed: 2024, quizMode: true })
+    assert.deepEqual(
+      batch.map(({ task, answer, quizOptions }) => [task.join(''), answer, quizOptions]),
+      [['(-2)*(-7)', 14, [11, 13, 14, 12]], ['(-3)*(-5)', 15, [17, 12, 15, 16]], ['3*4', 12, [15, 14, 12, 16]]],
+    )
+  })
+
   check('different seeds give different tasks', () => {
     const seen = new Set()
     for (let seed = 1; seed <= 500; seed++) {
