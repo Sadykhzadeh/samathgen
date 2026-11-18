@@ -990,10 +990,11 @@ fn highest(bits: &[u64]) -> Option<usize> {
         .map(|(k, &word)| k * 64 + 63 - word.leading_zeros() as usize)
 }
 
-/// Sets in `into` every `r - t` for a bit `r` of `from` that is `t` or more.
-fn subtract_into(into: &mut [u64], from: &[u64], t: usize) {
+/// Sets in `into` every `r - t` for a bit `r` of `from` that is `t` or more,
+/// in the words from `first` up.
+fn subtract_into(into: &mut [u64], from: &[u64], t: usize, first: usize) {
     let (words, bits) = (t / 64, t % 64);
-    for (k, slot) in into.iter_mut().enumerate() {
+    for (k, slot) in into.iter_mut().enumerate().skip(first) {
         let low = from.get(k + words).copied().unwrap_or(0);
         let high = from.get(k + words + 1).copied().unwrap_or(0);
         *slot |= if bits == 0 {
@@ -1090,6 +1091,10 @@ pub fn flat_chains(
     }
     let values = chain_values(length, max, config.ops.has(Op::Div));
     let words = max as usize / 64 + 1;
+    // Without `+` a running result only falls, so the answer is at least `low`
+    // and so is every result on the way to it: the words below `low` are not
+    // worked out, and the lookups below only ever reach the words above.
+    let first = if adds { 0 } else { low as usize / 64 };
     let mut ends: Vec<Vec<u64>> = vec![vec![0; words]; length + 1];
     for n in 1..=length {
         let mut set = vec![0u64; words];
@@ -1115,7 +1120,7 @@ pub fn flat_chains(
                     add_into(&mut set, &ends[n - m], t);
                 }
                 if subtracts {
-                    subtract_into(&mut set, &ends[n - m], t);
+                    subtract_into(&mut set, &ends[n - m], t, first);
                 }
             }
         }
@@ -1496,9 +1501,9 @@ mod tests {
     /// What `numbers` make when joined by `gaps`, worked out from the left as
     /// a pupil would: `/` binds tighter than `+` and `-`. `None` when a
     /// division is not exact or by a number from 2 to 10, or a running
-    /// result leaves 0 to 10.
-    fn flat_value(numbers: &[i64], gaps: &[Op]) -> Option<i64> {
-        let within = |v: i64| (0..=10).contains(&v).then_some(v);
+    /// result leaves 0 to `max`.
+    fn flat_value(numbers: &[i64], gaps: &[Op], max: i64) -> Option<i64> {
+        let within = |v: i64| (0..=max).contains(&v).then_some(v);
         let (mut running, mut sign, mut term) = (0, Op::Add, numbers[0]);
         for (&number, &gap) in numbers[1..].iter().zip(gaps) {
             match gap {
@@ -1528,66 +1533,74 @@ mod tests {
     #[test]
     fn flat_chains_builds_exactly_what_the_flat_tasks_make() {
         let joins = [Op::Add, Op::Sub, Op::Div];
-        for bits in 1..8usize {
-            let allowed: Vec<Op> = joins
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| bits >> i & 1 == 1)
-                .map(|(_, &op)| op)
-                .collect();
-            let ops =
-                Ops::from_bits(allowed.iter().fold(0, |set, &op| set | 1 << op as u32)).unwrap();
-            for length in 2..=5 {
-                let mut reachable = [false; 11];
-                let mut numbers = vec![1i64; length];
-                loop {
-                    for code in 0..allowed.len().pow(length as u32 - 1) {
-                        let gaps: Vec<Op> = (0..length - 1)
-                            .map(|i| allowed[code / allowed.len().pow(i as u32) % allowed.len()])
-                            .collect();
-                        if let Some(value) = flat_value(&numbers, &gaps) {
-                            reachable[value as usize] = true;
+        // Within 100 the answers span two words of the table, and the
+        // lengths stop at three, which is as many as can be counted.
+        let sizes = [(10, 2..=5), (100, 2..=3)];
+        for (max, lengths) in sizes {
+            for bits in 1..8usize {
+                let allowed: Vec<Op> = joins
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| bits >> i & 1 == 1)
+                    .map(|(_, &op)| op)
+                    .collect();
+                let ops = Ops::from_bits(allowed.iter().fold(0, |set, &op| set | 1 << op as u32))
+                    .unwrap();
+                for length in lengths.clone() {
+                    let mut reachable = vec![false; max as usize + 1];
+                    let mut numbers = vec![1i64; length];
+                    loop {
+                        for code in 0..allowed.len().pow(length as u32 - 1) {
+                            let gaps: Vec<Op> = (0..length - 1)
+                                .map(|i| {
+                                    allowed[code / allowed.len().pow(i as u32) % allowed.len()]
+                                })
+                                .collect();
+                            if let Some(value) = flat_value(&numbers, &gaps, max) {
+                                reachable[value as usize] = true;
+                            }
                         }
+                        let mut at = 0;
+                        while at < length && numbers[at] == max {
+                            numbers[at] = 1;
+                            at += 1;
+                        }
+                        if at == length {
+                            break;
+                        }
+                        numbers[at] += 1;
                     }
-                    let mut at = 0;
-                    while at < length && numbers[at] == 10 {
-                        numbers[at] = 1;
-                        at += 1;
-                    }
-                    if at == length {
-                        break;
-                    }
-                    numbers[at] += 1;
-                }
 
-                for answer in 0..=10 {
-                    let config = Config {
-                        answer,
-                        length,
-                        brackets: false,
-                        ops,
-                        negatives: false,
-                        max: 10,
-                        flat: true,
-                        units: true,
-                    };
-                    let mut tokens = Vec::new();
-                    let built =
-                        flat_chains(&config, (answer, answer), &mut Rng::new(1), &mut tokens);
-                    let what = format!("answer {answer}, length {length}, ops {bits:03b}");
-                    assert_eq!(built.is_some(), reachable[answer as usize], "{what}");
-                    let Some((found, expr)) = built else {
-                        continue;
-                    };
-                    assert_eq!(found, answer, "{what}");
-                    assert_eq!(expr.leaf_count(), length, "{what}");
-                    assert_eq!(tokens, expr.tokens(), "{what}");
-                    assert_eq!(Parser::parse(&tokens), answer, "{what}");
-                    for token in &tokens {
-                        match token {
-                            Token::Op(op) => assert!(ops.has(*op), "{op:?} in {what}"),
-                            Token::Num(n) => assert!((1..=10).contains(n), "{n} in {what}"),
-                            _ => panic!("a bracket in a flat task, {what}"),
+                    for answer in 0..=max {
+                        let config = Config {
+                            answer,
+                            length,
+                            brackets: false,
+                            ops,
+                            negatives: false,
+                            max,
+                            flat: true,
+                            units: true,
+                        };
+                        let mut tokens = Vec::new();
+                        let built =
+                            flat_chains(&config, (answer, answer), &mut Rng::new(1), &mut tokens);
+                        let what =
+                            format!("answer {answer}, length {length}, max {max}, ops {bits:03b}");
+                        assert_eq!(built.is_some(), reachable[answer as usize], "{what}");
+                        let Some((found, expr)) = built else {
+                            continue;
+                        };
+                        assert_eq!(found, answer, "{what}");
+                        assert_eq!(expr.leaf_count(), length, "{what}");
+                        assert_eq!(tokens, expr.tokens(), "{what}");
+                        assert_eq!(Parser::parse(&tokens), answer, "{what}");
+                        for token in &tokens {
+                            match token {
+                                Token::Op(op) => assert!(ops.has(*op), "{op:?} in {what}"),
+                                Token::Num(n) => assert!((1..=max).contains(n), "{n} in {what}"),
+                                _ => panic!("a bracket in a flat task, {what}"),
+                            }
                         }
                     }
                 }
