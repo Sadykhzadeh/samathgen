@@ -551,6 +551,18 @@ const suite = (mathGen, mathGenBatch) => {
       const minus = mathGen(6, { operators: ['-'], brackets: 'never', negatives: false, max: 20, answer: 13, seed })
       assert.equal(eval(minus.task.join('')), 13, `seed ${seed}`)
     }
+    // Seeds where the answers 5 to 8 can each be built, but the search that
+    // shared its growths between them used all of them on answers that
+    // cannot, so a range or the default range was refused.
+    for (const seed of [5209, 41049, 53971, 62665]) {
+      const options = { operators: ['-', '/'], brackets: 'never', negatives: false, max: 10, seed }
+      const ranged = mathGen(8, { ...options, answer: [5, 10] })
+      assert.ok(ranged.answer >= 5 && ranged.answer <= 10, `seed ${seed}`)
+      assert.equal(eval(ranged.task.join('')), ranged.answer, `seed ${seed}`)
+      const defaulted = mathGen(8, options)
+      assert.ok(defaulted.answer >= 5 && defaulted.answer <= 10, `seed ${seed}`)
+      assert.equal(eval(defaulted.task.join('')), defaulted.answer, `seed ${seed}`)
+    }
   })
 
   check('negatives: false refuses what it cannot build', () => {

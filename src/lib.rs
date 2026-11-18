@@ -34,7 +34,9 @@ const WITHOUT_UNITS_RESTARTS: usize = 1;
 /// that make 1 within 10 without negatives, grow into a corner in all but a
 /// few tries, so the usual 64 restarts refuse a buildable request for one
 /// seed in six. Those seeds get this many more growths, shared by the answers
-/// on offer, which at most about doubles the time a refusal takes.
+/// on offer, and a request still refused after that is searched once more
+/// with each answer given a fair share of what is left, so that an answer
+/// which cannot be built does not use up the growths of the ones that can.
 const FALLBACK_GROWTHS: usize = 1024;
 
 /// How many answers of a range are tried before the request is refused: all
@@ -426,12 +428,18 @@ fn grow_for_some_answer(
 /// Grows a task for an answer from `low..=high` as `grow_for_some_answer`
 /// does, but with the growths in `growths` shared by the answers tried: once
 /// they are spent the search stops, and nothing restarts on its own account.
+///
+/// With `apportion`, an answer is given only its share of the growths left
+/// for the answers still to try, so one that cannot be built, and that
+/// would otherwise use up every growth before it gave up, does not leave
+/// the others unsearched.
 fn grow_within(
     (low, high): (i64, i64),
     config: impl Fn(i64) -> Config,
     rng: &mut Rng,
     tokens: &mut Vec<Token>,
     growths: &mut usize,
+    apportion: bool,
 ) -> Option<(i64, expr::Expr)> {
     let span = (high - low + 1) as u64;
     let walked = span <= ANSWER_TRIES as u64;
@@ -447,13 +455,66 @@ fn grow_within(
     while left > 0 && *growths > 0 {
         let at = rng.below(left as u64) as usize;
         let answer = candidates[at];
-        if let Some(expression) = expr::generate_within(&config(answer), rng, tokens, growths) {
+        let found = if apportion {
+            let granted = (*growths / left).max(1);
+            let mut share = granted;
+            let found = expr::generate_within(&config(answer), rng, tokens, &mut share);
+            *growths -= granted - share;
+            found
+        } else {
+            expr::generate_within(&config(answer), rng, tokens, growths)
+        };
+        if let Some(expression) = found {
             return Some((answer, expression));
         }
         left -= 1;
         candidates.swap(at, left);
     }
     None
+}
+
+/// The search a request the usual one refused gets: for each kind of task
+/// the operators allow, growths from `FALLBACK_GROWTHS` shared by the answers
+/// tried, apportioned as `grow_within` says.
+fn fallback_search(
+    (low, high): (i64, i64),
+    ops: Ops,
+    config: &impl Fn(i64, bool) -> Config,
+    rng: &mut Rng,
+    tokens: &mut Vec<Token>,
+    apportion: bool,
+) -> Option<(i64, expr::Expr)> {
+    let mut without_units = FALLBACK_GROWTHS;
+    let mut with_units = FALLBACK_GROWTHS;
+    if ops.has(Op::Mul) {
+        grow_within(
+            (low, high),
+            |answer| config(answer, false),
+            rng,
+            tokens,
+            &mut without_units,
+            apportion,
+        )
+        .or_else(|| {
+            grow_within(
+                (low, high),
+                |answer| config(answer, true),
+                rng,
+                tokens,
+                &mut with_units,
+                apportion,
+            )
+        })
+    } else {
+        grow_within(
+            (low, high),
+            |answer| config(answer, true),
+            rng,
+            tokens,
+            &mut with_units,
+            apportion,
+        )
+    }
 }
 
 /// Appends one task to `out`, or returns false and appends nothing when the
@@ -537,37 +598,10 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     }
     // Only a request the usual search refuses is searched again, within a
     // budget of growths, so a seed that gave a task before gives the same
-    // one now.
-    .or_else(|| {
-        let mut without_units = FALLBACK_GROWTHS;
-        let mut with_units = FALLBACK_GROWTHS;
-        if ops.has(Op::Mul) {
-            grow_within(
-                (low, high),
-                |answer| config(answer, false),
-                &mut rng,
-                tokens,
-                &mut without_units,
-            )
-            .or_else(|| {
-                grow_within(
-                    (low, high),
-                    |answer| config(answer, true),
-                    &mut rng,
-                    tokens,
-                    &mut with_units,
-                )
-            })
-        } else {
-            grow_within(
-                (low, high),
-                |answer| config(answer, true),
-                &mut rng,
-                tokens,
-                &mut with_units,
-            )
-        }
-    });
+    // one now. One that is refused again is searched once more, with each
+    // answer given its share of the budget.
+    .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, false))
+    .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, true));
     let Some((answer, expression)) = found else {
         return false;
     };
