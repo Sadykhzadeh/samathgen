@@ -246,7 +246,7 @@ request should not get to decide how much memory a server asks for.
 Tasks of two numbers come from a small pool, so a worksheet of them repeats
 itself: two numbers of `*` make 42 different tasks, and a batch of 20 holds
 5.6 repeats on average; of `/` within 100, 2.2, and adding within 20 without
-negatives, 1.3. Pass `distinct: true` for a batch with none. A task that
+negatives, 1.4. Pass `distinct: true` for a batch with none. A task that
 repeats one before it is replaced by the task for the next seed from
 `seed + count` on, so every other task is still the one for `seed + i`. A
 repeat is only kept once 16 replacements in a row repeat too, which is what
