@@ -518,6 +518,32 @@ const suite = (mathGen, mathGenBatch) => {
     assert.ok(all.some((t) => typeof t === 'number' && t < 0), 'no negative number in 500 tasks')
   })
 
+  check('every refused option is named in its error, with the values it takes', () => {
+    const refused = [
+      ['answer', [true, '5', {}, 10001, -10001, 1.5, NaN], /answer must be a (number from -10000 to 10000|whole number from -10000 to 10000), got /],
+      ['brackets', ['Never', 'none', 1, {}], /brackets must be true, false or 'never', got /],
+      ['distinct', ['1', 0, 'no'], /distinct must be true or false, got /],
+      ['max', ['20', 9, 10001, 20.5, {}], /max must be a whole number from 10 to 10000, got /],
+      ['negatives', ['false', 0, NaN], /negatives must be true or false, got /],
+      ['operators', ['+-', 5, {}], /operators must be an array such as \['\+', '-'\], got /],
+      ['operators', [['x'], ['++'], [1], ['+', 'x'], [null]], /operators must be \+ - \* or \/, got /],
+      ['operators', [[]], /operators must name at least one of \+ - \* \//],
+      ['quizMode', [1, 'true', []], /quizMode must be true or false, got /],
+      ['seed', ['1', NaN, Infinity, -1, 1.5, 2 ** 53], /seed must be a whole number from 0 to 9007199254740991, got /],
+    ]
+    for (const [name, values, pattern] of refused) {
+      for (const value of values) {
+        assert.throws(() => mathGen(4, { seed: 1, [name]: value }), pattern, `${name} ${String(value)}`)
+        assert.throws(() => mathGenBatch(2, 4, { seed: 1, [name]: value }), pattern, `${name} ${String(value)}`)
+      }
+    }
+    for (const count of [-1, 1.5, 10001, '3']) {
+      assert.throws(() => mathGenBatch(count, 4, { seed: 1 }), /count must be a whole number from 0 to 10000, got /, String(count))
+    }
+    assert.throws(() => mathGen('6', { seed: 1 }), /length must be a number, got "6"$/)
+    assert.throws(() => mathGen(4, { answer: '5', seed: 1 }), /answer must be a number from -10000 to 10000, got "5"$/)
+  })
+
   check('an option the library does not have is refused, with the nearest one named', () => {
     for (const [wrong, near] of [
       ['negative', 'negatives'],

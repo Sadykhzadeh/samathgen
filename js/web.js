@@ -56,9 +56,17 @@ const read = (pointer) => {
 // largest seed mathGen accepts.
 const drawSeed = (count) => Math.floor(Math.random() * (Number.MAX_SAFE_INTEGER - count + 1))
 
+// How a refused value is named in an error: a string in quotes, so that '6'
+// is told from 6, an array as an array, and anything else by its type.
+const got = (value) => typeof value === 'string' ? JSON.stringify(value)
+  : Array.isArray(value) ? 'an array'
+  : value !== null && typeof value === 'object' ? 'an object'
+  : typeof value === 'function' ? 'a function'
+  : String(value)
+
 const clampLength = (length) => {
   if (length !== undefined && length !== null && typeof length !== 'number') {
-    throw new TypeError(`length must be a number, got ${typeof length}`)
+    throw new TypeError(`length must be a number, got ${got(length)}`)
   }
   if (length === Infinity) return LENGTH_MAX
   if (!Number.isFinite(length)) return LENGTH_MIN
@@ -99,7 +107,7 @@ const unknownOption = (name) => {
 const readOptions = (more) => {
   if (more === undefined || more === null) return {}
   if (typeof more !== 'object' || Array.isArray(more)) {
-    throw new TypeError(`options must be an object, got ${Array.isArray(more) ? 'an array' : typeof more}`)
+    throw new TypeError(`options must be an object, got ${got(more)}`)
   }
   for (const name in more) {
     if (!OPTIONS.has(name)) throw unknownOption(name)
@@ -110,7 +118,7 @@ const readOptions = (more) => {
 const readAnswer = (answer, max) => {
   if (answer === undefined || answer === null) return undefined
   if (typeof answer !== 'number') {
-    throw new TypeError(`answer must be a number, got ${typeof answer}`)
+    throw new TypeError(`answer must be a number from -${max} to ${max}, got ${got(answer)}`)
   }
   if (!Number.isInteger(answer) || Math.abs(answer) > max) {
     throw new RangeError(`answer must be a whole number from -${max} to ${max}, got ${answer}`)
@@ -145,7 +153,7 @@ const MAX_MIN = 10
 const readMax = (max) => {
   if (max === undefined || max === null) return ANSWER_LIMIT
   if (typeof max !== 'number') {
-    throw new TypeError(`max must be a number, got ${typeof max}`)
+    throw new TypeError(`max must be a whole number from ${MAX_MIN} to ${ANSWER_LIMIT}, got ${got(max)}`)
   }
   if (!Number.isInteger(max) || max < MAX_MIN || max > ANSWER_LIMIT) {
     throw new RangeError(`max must be a whole number from ${MAX_MIN} to ${ANSWER_LIMIT}, got ${max}`)
@@ -175,12 +183,12 @@ const FLAT = 1 << 5
 const readOperators = (operators) => {
   if (operators === undefined || operators === null) return ALL_OPERATORS
   if (!Array.isArray(operators)) {
-    throw new TypeError(`operators must be an array such as ['+', '-'], got ${typeof operators}`)
+    throw new TypeError(`operators must be an array such as ['+', '-'], got ${got(operators)}`)
   }
   let bits = 0
   for (const operator of operators) {
     const index = typeof operator === 'string' && operator.length === 1 ? OPERATORS.indexOf(operator) : -1
-    if (index < 0) throw new RangeError(`unknown operator ${JSON.stringify(operator)}, expected + - * or /`)
+    if (index < 0) throw new RangeError(`operators must be + - * or /, got ${got(operator)}`)
     bits |= 1 << index
   }
   if (bits === 0) throw new RangeError('operators must name at least one of + - * /')
@@ -194,8 +202,7 @@ const readOperators = (operators) => {
 const readFlag = (name, value, fallback) => {
   if (value === undefined || value === null) return fallback
   if (typeof value !== 'boolean') {
-    const got = typeof value === 'string' ? JSON.stringify(value) : typeof value === 'number' ? String(value) : typeof value
-    throw new TypeError(`${name} must be true or false, got ${got}`)
+    throw new TypeError(`${name} must be true or false, got ${got(value)}`)
   }
   return value
 }
@@ -208,7 +215,9 @@ const readBrackets = (brackets) => {
     throw new RangeError(`brackets must be true, false or 'never', got ${JSON.stringify(brackets)}`)
   }
   if (brackets === 'never') return FLAT
-  readFlag('brackets', brackets, false)
+  if (brackets !== undefined && brackets !== null && typeof brackets !== 'boolean') {
+    throw new TypeError(`brackets must be true, false or 'never', got ${got(brackets)}`)
+  }
   return 0
 }
 
@@ -246,7 +255,7 @@ const cannotBuild = (length, answers, max, options) => {
 const readSeed = (seed, count) => {
   if (seed === undefined || seed === null) return drawSeed(count)
   if (typeof seed !== 'number' || !Number.isFinite(seed)) {
-    throw new TypeError(`seed must be a finite number, got ${typeof seed === 'number' ? seed : typeof seed}`)
+    throw new TypeError(`seed must be a whole number from 0 to ${Number.MAX_SAFE_INTEGER}, got ${got(seed)}`)
   }
   if (!Number.isSafeInteger(seed) || seed < 0) {
     throw new RangeError(`seed must be a whole number from 0 to ${Number.MAX_SAFE_INTEGER}, got ${seed}`)
@@ -325,7 +334,7 @@ export const mathGen = (length, more) => {
 export const mathGenBatch = (count, length, more) => {
   assertReady()
   if (!Number.isInteger(count) || count < 0 || count > BATCH_LIMIT) {
-    throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${count}`)
+    throw new RangeError(`count must be a whole number from 0 to ${BATCH_LIMIT}, got ${got(count)}`)
   }
   const options = readOptions(more)
   const max = readMax(options.max)
