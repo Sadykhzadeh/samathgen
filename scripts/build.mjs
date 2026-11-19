@@ -15,7 +15,7 @@
 // type depend on a tool's unrelated choices.
 
 import { execFileSync } from 'node:child_process'
-import { rmSync, writeFileSync } from 'node:fs'
+import { existsSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const targets = [
@@ -23,12 +23,16 @@ const targets = [
   { target: 'web', dir: 'dist/web', type: 'module' },
 ]
 
-rmSync('dist', { recursive: true, force: true })
-
 // The package's own Node entry point rather than the .bin shim: since Node 20
 // closed CVE-2024-27980, spawning a .cmd without a shell fails with EINVAL,
 // and going through a shell to reach a shim is worse than skipping both.
 const wasmPack = join('node_modules', 'wasm-pack', 'run.js')
+if (!existsSync(wasmPack)) {
+  console.error(`${wasmPack} is missing: run npm ci first, which installs wasm-pack`)
+  process.exit(1)
+}
+
+rmSync('dist', { recursive: true, force: true })
 
 for (const { target, dir, type } of targets) {
   console.log(`building ${target} -> ${dir}`)
