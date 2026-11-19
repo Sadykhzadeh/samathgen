@@ -368,7 +368,7 @@ the same loop beside it.
 
 ## Building from source
 
-Needs a Rust toolchain with the `wasm32-unknown-unknown` target. wasm-pack is
+Needs Rust 1.81 or newer with the `wasm32-unknown-unknown` target. wasm-pack is
 a dev dependency, so `npm ci` installs it.
 
 ```sh
