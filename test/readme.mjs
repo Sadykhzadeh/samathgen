@@ -50,5 +50,32 @@ const browser = execFileSync(process.execPath, ['--conditions=browser', '--input
 assert.match(browser, /call and await init\(\) first/, 'the browser condition gives the entry that waits for init()')
 console.log('  ok    the browser condition gives the entry that waits for init()')
 
+// The shares of tasks the README quotes come from seeded batches, so they are
+// measured here, and the rounded figures have to be the ones it gives.
+const seeded = (length, more) => {
+  const tasks = []
+  for (let k = 0; k < 20; k++) tasks.push(...required.mathGenBatch(10000, length, { ...more, seed: 1000000 * k + 7 }))
+  return tasks
+}
+const share = (tasks, test) => Math.round(100 * tasks.filter(test).length / tasks.length)
+const numbers = ({ task }) => task.filter((token) => typeof token === 'number')
+const pastHundred = (value) => numbers(value).some((n) => n > 100)
+const pastTwenty = (value) => numbers(value).some((n) => n > 20)
+const grouped = ({ task }) => task.includes('(')
+const withAnswers = { answer: [10, 20] }
+const plusMinus = { operators: ['+', '-'], negatives: false, answer: [10, 20] }
+const three = seeded(3, plusMinus)
+const four = seeded(4, plusMinus)
+const figures = [
+  `turns up in ${share(seeded(2, withAnswers), pastHundred)}% of tasks of two numbers and ${share(seeded(8, withAnswers), pastHundred)}% of tasks of eight`,
+  `passes 20 in ${share(three, pastTwenty)}% of tasks of three`,
+  `${share(three.filter(pastTwenty), grouped)}% of those tasks of three and ${share(four.filter(pastTwenty), grouped)}% of those of four`,
+]
+const quoted = readme.replace(/\s+/g, ' ')
+for (const figure of figures) {
+  assert.ok(quoted.includes(figure), `the README should say: ${figure}`)
+}
+console.log('  ok    the shares the README quotes match a seeded run')
+
 console.log(failures === 0 ? `${blocks.length} README examples ran` : `${failures} README examples failed`)
 process.exit(failures === 0 ? 0 : 1)

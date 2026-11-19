@@ -218,10 +218,10 @@ mathGenBatch(20, 3, { answer: [50, 100], max: 100, negatives: false })
 ```
 
 Without a `max`, numbers run well past the answer: with answers from 10 to
-20, a number past 100 turns up in 10% of tasks of two numbers and 39% of
+20, a number past 100 turns up in 9% of tasks of two numbers and 28% of
 tasks of eight, and adding and taking away without negatives passes 20 in
 57% of tasks of three. With `max: 20` none of them does. Without
-`brackets: 'never'`, 32% of those tasks of three and 58% of those of four
+`brackets: 'never'`, 38% of those tasks of three and 58% of those of four
 come as `12-(5+3)` or `20-(9-4)`.
 
 Returns:
