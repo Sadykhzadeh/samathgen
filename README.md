@@ -117,6 +117,36 @@ a pupil's reply without trusting the generator: `Function` or any
 expression parser given `task.join('')` returns `answer`, and a harder sheet
 is a longer `length` with `brackets: true`.
 
+### Choosing options for a class
+
+Most of what a class needs is set by four options: `operators` for the
+operations it has met, `max` for how big the numbers may get, `negatives`
+for whether it has met negative numbers, and `brackets: 'never'` for a class
+that has not met brackets yet.
+
+Adding and taking away within ten, as in the first year. Every number is from
+0 to 10 and every answer from 5 to 10, which is the default for a `max` of 10,
+and with `distinct` no two tasks of the sheet are the same:
+
+```js
+import { mathGenBatch } from 'samathgen'
+
+const firstYear = mathGenBatch(10, 2, {
+  operators: ['+', '-'], max: 10, negatives: false, brackets: 'never', distinct: true, seed: 2024,
+})
+```
+
+Adding and taking away within a hundred, with the answers from 10 to 100
+given as a range. Without `answer` the answers would stay between 10 and 20:
+
+```js
+import { mathGenBatch } from 'samathgen'
+
+const secondYear = mathGenBatch(10, 3, {
+  operators: ['+', '-'], max: 100, answer: [10, 100], negatives: false, brackets: 'never', distinct: true, seed: 2024,
+})
+```
+
 ## API
 
 ### `mathGen(length, more?)`
