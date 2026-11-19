@@ -309,7 +309,7 @@ bench. 0.1.3 is the TypeScript version that npm served before 1.0.0:
 | `mathGenBatch`, 1000 to a call | 0.52 µs | 1.9 million |
 
 A batch crosses the boundary once for all of its tasks, which is most of what
-there is to gain from it now. The WebAssembly is 45 096 bytes, 19 637
+there is to gain from it now. The WebAssembly is 45 217 bytes, 19 689
 gzipped, compiled for speed rather than size.
 
 `npm run bench` prints the figures for your machine, and with
