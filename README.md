@@ -289,6 +289,21 @@ const worksheet = mathGenBatch(20, 4, { seed: 2024, quizMode: true })
 const tables = mathGenBatch(20, 2, { operators: ['*'], distinct: true })
 ```
 
+### `displayTask(task)`
+
+Writes a task as it reads on a printed worksheet: `×` for `*`, `÷` for `/`,
+and a minus sign `−` for `-` and for a negative number. `task.join('')` is
+still the text that evaluates, so use this only for showing a task:
+
+```js
+import { displayTask, mathGen } from 'samathgen'
+
+const { task, answer } = mathGen(3, { operators: ['*', '/'], seed: 5 })
+console.log(`${displayTask(task)} = ${answer}`)
+```
+
+A token that is not a number, an operator or a bracket is a `TypeError`.
+
 TypeScript declarations ship with the package.
 
 ## How it works

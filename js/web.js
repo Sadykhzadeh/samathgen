@@ -376,3 +376,18 @@ export const mathGenBatch = (count, length, more) => {
   }
   return tasks
 }
+
+// The signs a printed worksheet uses. `task.join('')` stays the form that
+// evaluates; this is for showing a task to a reader.
+const PRINTED = new Map([['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷'], ['(', '('], [')', ')']])
+
+/**
+ * Writes a task the way it reads on a printed page: `×` for `*`, `÷` for `/`,
+ * and a minus sign `−` for `-` and for a negative number. It is for showing
+ * the task; `task.join('')` is the text that evaluates to the answer.
+ */
+export const displayTask = (task) => task.map((token) => {
+  if (typeof token === 'number') return String(token).replace('-', '−')
+  if (!PRINTED.has(token)) throw new TypeError(`a task is made of numbers, operators and brackets, got ${got(token)}`)
+  return PRINTED.get(token)
+}).join('')

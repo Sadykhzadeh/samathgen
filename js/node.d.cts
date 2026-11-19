@@ -103,6 +103,15 @@ export interface MathGenBatchOptions extends MathGenOptions {
  */
 export function mathGenBatch (count: number, length: number, more?: MathGenBatchOptions): MathGenResult[]
 
+/**
+ * Writes a task the way it reads on a printed page: `×` for `*`, `÷` for `/`,
+ * and a minus sign `−` for `-` and for a negative number. It is for showing
+ * the task; `task.join('')` is the text that evaluates to the answer.
+ *
+ * A token that is not a number, operator or bracket throws a TypeError.
+ */
+export function displayTask (task: ReadonlyArray<number | Operators | Bracket>): string
+
 /** What the global constructor `Name` makes, or `never` where nothing
  *  declares one. A Node project has no DOM library, and naming `Response`
  *  or `WebAssembly.Module` outright would fail to type-check there. */

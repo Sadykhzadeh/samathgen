@@ -14,8 +14,10 @@
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { init as nodeInit, mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch } from '../js/node.cjs'
-import { init, mathGen as webMathGen, mathGenBatch as webMathGenBatch } from '../js/web.js'
+import {
+  init as nodeInit, mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch, displayTask as nodeDisplayTask,
+} from '../js/node.cjs'
+import { init, mathGen as webMathGen, mathGenBatch as webMathGenBatch, displayTask as webDisplayTask } from '../js/web.js'
 
 const SAMPLES = Number(process.argv[2] || 200_000)
 
@@ -800,6 +802,22 @@ check('init() loads after a load that failed', () => {
 suite(webMathGen, webMathGenBatch)
 
 console.log('\nboth')
+check('displayTask prints the signs a page uses, the same from either entry point', () => {
+  const task = [36, '/', 6, '+', 2, '*', 5]
+  assert.equal(nodeDisplayTask(task), '36\u00f76+2\u00d75')
+  assert.equal(webDisplayTask(task), '36\u00f76+2\u00d75')
+  const negative = [7, '-', '(', -5, ')']
+  assert.equal(nodeDisplayTask(negative), '7\u2212(\u22125)')
+  assert.equal(webDisplayTask(negative), '7\u2212(\u22125)')
+  for (let seed = 0; seed < 500; seed++) {
+    const { task: built } = nodeMathGen(2 + (seed % 7), { seed, brackets: true })
+    assert.equal(webDisplayTask(built), nodeDisplayTask(built), `seed ${seed}`)
+    assert.equal(nodeDisplayTask(built).replace(/[\u2212\u00d7\u00f7]/g, (sign) => ({ '\u2212': '-', '\u00d7': '*', '\u00f7': '/' })[sign]), built.join(''), `seed ${seed}`)
+  }
+  assert.throws(() => nodeDisplayTask(['sum']), TypeError)
+  assert.throws(() => webDisplayTask([1, 'toString']), TypeError)
+})
+
 check('the same seed gives the same task from either entry point', () => {
   for (let seed = 0; seed < 2000; seed++) {
     const more = { seed, quizMode: seed % 2 === 0, brackets: seed % 3 === 0 }
