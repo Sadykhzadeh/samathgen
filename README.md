@@ -365,11 +365,12 @@ the same loop beside it.
 
 ## Building from source
 
-Needs a Rust toolchain with the `wasm32-unknown-unknown` target, plus
-[wasm-pack](https://rustwasm.github.io/wasm-pack/).
+Needs a Rust toolchain with the `wasm32-unknown-unknown` target. wasm-pack is
+a dev dependency, so `npm ci` installs it.
 
 ```sh
 rustup target add wasm32-unknown-unknown
+npm ci                 # installs wasm-pack
 npm run build          # writes dist/node and dist/web
 npm test               # cargo test, then the JavaScript contract suite
 npm run test:types     # the declarations against test/types.ts (needs tsc via npx)
