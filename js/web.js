@@ -252,7 +252,10 @@ const cannotBuild = (length, answers, max, options) => {
     `${describeAnswers(answers, max)} can be built from ` +
     `${(options.operators || OPERATORS.split('')).join(' ')}` +
     `${without.length > 0 ? ` without ${without.join(' or ')}` : ''}` +
-    `${max < ANSWER_LIMIT ? ` within ${max}` : ''}`
+    `${max < ANSWER_LIMIT ? ` within ${max}` : ''}. ` +
+    (max < ANSWER_LIMIT
+      ? 'A different answer, a larger max or other operators may work.'
+      : 'A different answer or other operators may work.')
   )
 }
 

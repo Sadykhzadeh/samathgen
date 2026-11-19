@@ -323,10 +323,10 @@ const suite = (mathGen, mathGenBatch) => {
     }
     // `/` alone is one chain, whose first number is the answer times every
     // divisor after it.
-    assert.throws(() => mathGen(16, { operators: ['/'], brackets: 'never', seed: 1 }), /16 terms .* from \/ without brackets$/)
+    assert.throws(() => mathGen(16, { operators: ['/'], brackets: 'never', seed: 1 }), /16 terms .* from \/ without brackets\. A different answer or other operators may work\.$/)
     assert.throws(
       () => mathGen(12, { operators: ['-'], negatives: false, max: 20, brackets: 'never' }),
-      /from - without negative numbers or brackets within 20$/
+      /from - without negative numbers or brackets within 20\. A different answer, a larger max or other operators may work\.$/
     )
   })
 
@@ -733,7 +733,7 @@ const suite = (mathGen, mathGenBatch) => {
       assert.equal(mathGen(3, { operators: ['/'], max: 20, seed }).answer, 10)
       assert.ok(mathGen(14, { operators: ['+'], negatives: false, seed }).answer >= 14)
     }
-    assert.throws(() => mathGen(3, { operators: ['/'], max: 19 }), /an answer from 10 to 19 can be built from \/ within 19$/)
+    assert.throws(() => mathGen(3, { operators: ['/'], max: 19 }), /an answer from 10 to 19 can be built from \/ within 19\. A different answer, a larger max or other operators may work\.$/)
   })
 
   check('a max it cannot honour is refused', () => {
@@ -748,7 +748,7 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(3, { max: 20, answer: 11, operators: ['/'] }), /evaluating to 11 can be built from \/ within 20/)
     assert.throws(
       () => mathGen(11, { max: 10, operators: ['+'], negatives: false }),
-      /11 terms evaluating to an answer from 5 to 10 can be built from \+ without negative numbers within 10$/
+      /11 terms evaluating to an answer from 5 to 10 can be built from \+ without negative numbers within 10\. A different answer, a larger max or other operators may work\.$/
     )
     for (let seed = 0; seed < 100; seed++) {
       assert.deepEqual(mathGen(5, { seed, max: 10000, quizMode: true }), mathGen(5, { seed, max: null, quizMode: true }))
