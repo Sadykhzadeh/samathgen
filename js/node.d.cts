@@ -86,7 +86,7 @@ export function mathGen (length: number, more?: MathGenOptions): MathGenResult
 export interface MathGenBatchOptions extends MathGenOptions {
   /** Leave no task in the batch that repeats one before it: a repeat is
    *  replaced by the task for the next seed from `seed + count` on, and
-   *  kept only once 16 of those in a row repeat too, as when the options
+   *  kept only once 256 of those in a row repeat too, as when the options
    *  allow fewer tasks than `count`. A value that is not true or false
    *  throws a TypeError. Default: false. */
   distinct?: boolean | null

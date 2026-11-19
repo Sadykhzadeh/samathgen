@@ -279,8 +279,11 @@ itself: two numbers of `*` make 42 different tasks, and a batch of 20 holds
 negatives, 1.4. Pass `distinct: true` for a batch with none. A task that
 repeats one before it is replaced by the task for the next seed from
 `seed + count` on, so every other task is still the one for `seed + i`. A
-repeat is only kept once 16 replacements in a row repeat too, which is what
-happens when the options allow fewer tasks than `count`.
+repeat is only kept once 256 replacements in a row repeat too, which is what
+happens when the options allow fewer tasks than `count`. Such a batch is slower
+for it, since each kept repeat has used up its 256 draws: 10000 tasks of two
+numbers of `*` without negatives, which make 21 different tasks, take about
+0.6 s.
 
 ```js
 import { mathGenBatch } from 'samathgen'
@@ -354,7 +357,7 @@ bench. 0.1.3 is the TypeScript version that npm served before 1.0.0:
 | `mathGenBatch`, 1000 to a call | 0.52 µs | 1.9 million |
 
 A batch crosses the boundary once for all of its tasks, which is most of what
-there is to gain from it now. The WebAssembly is 45 960 bytes, 19 725
+there is to gain from it now. The WebAssembly is 45 961 bytes, 19 726
 gzipped, compiled for speed rather than size.
 
 `npm run bench` prints the figures for your machine, and with

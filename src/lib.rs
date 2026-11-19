@@ -274,10 +274,11 @@ fn fill_batch(
 }
 
 /// How many tasks in a row a distinct batch draws in place of a repeat
-/// before it keeps one. Two numbers of `*` make 42 tasks between them, and
-/// while a draw is as likely to be new as not, sixteen repeats in a row
-/// come once in 65 536.
-const DISTINCT_TRIES: u32 = 16;
+/// before it keeps one. The draws are not even: two numbers of `*` without
+/// negatives make 21 tasks, and a batch of 20 leaves one of them new, so a
+/// draw is new one time in 21 by the end, and 256 repeats in a row come
+/// about once in 270 000 draws at that point.
+const DISTINCT_TRIES: u32 = 256;
 
 /// The largest seed the JavaScript wrappers accept, Number.MAX_SAFE_INTEGER.
 /// A repeat drawn past it has no seed that `mathGen` could be asked for.

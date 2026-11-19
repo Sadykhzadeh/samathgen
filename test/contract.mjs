@@ -414,7 +414,7 @@ const suite = (mathGen, mathGenBatch) => {
   })
 
   check('distinct: true leaves no repeat in a batch and the rest in place', () => {
-    for (const [length, more] of [[2, { operators: ['*'] }], [2, { operators: ['/'], max: 100, quizMode: true }], [3, {}]]) {
+    for (const [length, more] of [[2, { operators: ['*'] }], [2, { operators: ['*'], negatives: false }], [2, { operators: ['/'], max: 100, quizMode: true }], [3, {}]]) {
       for (let seed = 0; seed < 50; seed++) {
         const plain = mathGenBatch(20, length, { ...more, seed: seed * 100 })
         const distinct = mathGenBatch(20, length, { ...more, seed: seed * 100, distinct: true })
