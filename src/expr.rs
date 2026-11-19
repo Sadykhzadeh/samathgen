@@ -1090,6 +1090,12 @@ pub fn flat_chains(
         return None;
     }
     let values = chain_values(length, max, config.ops.has(Op::Div));
+    // The numbers each length of chain works out to, in order, so that the
+    // loops below visit those rather than every number up to max.
+    let reachable: Vec<Vec<usize>> = values
+        .iter()
+        .map(|row| (0..row.len()).filter(|&v| row[v]).collect())
+        .collect();
     let words = max as usize / 64 + 1;
     // Without `+` a running result only falls, so the answer is at least `low`
     // and so is every result on the way to it: the words below `low` are not
@@ -1098,7 +1104,7 @@ pub fn flat_chains(
     let mut ends: Vec<Vec<u64>> = vec![vec![0; words]; length + 1];
     for n in 1..=length {
         let mut set = vec![0u64; words];
-        for (v, _) in values[n].iter().enumerate().filter(|(_, &on)| on) {
+        for &v in &reachable[n] {
             set[v / 64] |= 1 << (v % 64);
         }
         // A single number can be any of 1..=max, so after one more number,
@@ -1115,7 +1121,7 @@ pub fn flat_chains(
             }
         }
         for m in 2..n {
-            for (t, _) in values[m].iter().enumerate().filter(|(_, &on)| on) {
+            for &t in &reachable[m] {
                 if adds {
                     add_into(&mut set, &ends[n - m], t);
                 }
@@ -1148,13 +1154,7 @@ pub fn flat_chains(
             options.push(None);
         }
         for m in 1..n {
-            for (t, _) in values[m]
-                .iter()
-                .enumerate()
-                .take(max as usize + 1)
-                .skip(1)
-                .filter(|(_, &on)| on)
-            {
+            for &t in &reachable[m] {
                 if adds && t <= v && reached(&ends[n - m], v - t) {
                     options.push(Some((Op::Add, m, t)));
                 }
