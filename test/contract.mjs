@@ -561,6 +561,8 @@ const suite = (mathGen, mathGenBatch) => {
     }
     // Far from every option: no guess, but the list.
     assert.throws(() => mathGen(4, { difficulty: 3 }), /unknown option "difficulty"\. The options are answer, brackets, distinct, max, negatives, operators, quizMode, seed\./)
+    // A name of megabytes is refused, with only its start quoted in the message.
+    assert.throws(() => mathGen(4, { ['x'.repeat(2_000_000)]: false }), (error) => error instanceof TypeError && error.message.length < 300)
     // Every real option is let through, and `distinct` by a single task too.
     const everything = { answer: 12, brackets: true, distinct: true, max: 100, negatives: true, operators: ['+', '-', '*', '/'], quizMode: true, seed: 3 }
     assert.equal(mathGen(4, everything).answer, 12)

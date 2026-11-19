@@ -56,9 +56,14 @@ const read = (pointer) => {
 // largest seed mathGen accepts.
 const drawSeed = (count) => Math.floor(Math.random() * (Number.MAX_SAFE_INTEGER - count + 1))
 
+// A string from a request is quoted in its error, but only the start of it,
+// so that a value of megabytes does not come back in full in the message.
+const SHOWN = 40
+const quoted = (text) => JSON.stringify(text.length > SHOWN ? `${text.slice(0, SHOWN)}...` : text)
+
 // How a refused value is named in an error: a string in quotes, so that '6'
 // is told from 6, an array as an array, and anything else by its type.
-const got = (value) => typeof value === 'string' ? JSON.stringify(value)
+const got = (value) => typeof value === 'string' ? quoted(value)
   : Array.isArray(value) ? 'an array'
   : value !== null && typeof value === 'object' ? 'an object'
   : typeof value === 'function' ? 'a function'
@@ -96,10 +101,11 @@ const unknownOption = (name) => {
   const lower = name.toLowerCase()
   const near = [...OPTIONS].find((known) => {
     const other = known.toLowerCase()
-    return other === lower || other.startsWith(lower) || lower.startsWith(other) || editDistance(lower, other) <= 2
+    return other === lower || other.startsWith(lower) || lower.startsWith(other) ||
+      (Math.abs(lower.length - other.length) <= 2 && editDistance(lower, other) <= 2)
   })
   return new TypeError(
-    `unknown option ${JSON.stringify(name)}${near ? `, did you mean ${near}?` : '.'} ` +
+    `unknown option ${quoted(name)}${near ? `, did you mean ${near}?` : '.'} ` +
     `The options are ${[...OPTIONS].join(', ')}.`
   )
 }
@@ -212,7 +218,7 @@ const readFlag = (name, value, fallback) => {
 // brackets in, so it is refused, and so is anything else that is not a flag.
 const readBrackets = (brackets) => {
   if (typeof brackets === 'string' && brackets !== 'never') {
-    throw new RangeError(`brackets must be true, false or 'never', got ${JSON.stringify(brackets)}`)
+    throw new RangeError(`brackets must be true, false or 'never', got ${quoted(brackets)}`)
   }
   if (brackets === 'never') return FLAT
   if (brackets !== undefined && brackets !== null && typeof brackets !== 'boolean') {
