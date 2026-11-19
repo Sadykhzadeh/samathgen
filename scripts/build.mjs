@@ -32,6 +32,13 @@ if (!existsSync(wasmPack)) {
   process.exit(1)
 }
 
+try {
+  execFileSync('cargo', ['--version'], { stdio: 'ignore' })
+} catch {
+  console.error('cargo was not found: install Rust from https://rustup.rs, then run rustup target add wasm32-unknown-unknown')
+  process.exit(1)
+}
+
 rmSync('dist', { recursive: true, force: true })
 
 for (const { target, dir, type } of targets) {
