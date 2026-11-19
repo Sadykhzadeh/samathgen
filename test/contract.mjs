@@ -544,6 +544,7 @@ const suite = (mathGen, mathGenBatch) => {
     }
     assert.throws(() => mathGen('6', { seed: 1 }), /length must be a number, got "6"$/)
     assert.throws(() => mathGen(4, { answer: '5', seed: 1 }), /answer must be a number from -10000 to 10000, got "5"$/)
+    assert.throws(() => mathGen(4, { answer: 5n, seed: 1 }), /answer must be a number from -10000 to 10000, got a bigint$/)
   })
 
   check('an option the library does not have is refused, with the nearest one named', () => {

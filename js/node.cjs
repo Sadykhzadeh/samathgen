@@ -62,6 +62,7 @@ const got = (value) => typeof value === 'string' ? quoted(value)
   : Array.isArray(value) ? 'an array'
   : value !== null && typeof value === 'object' ? 'an object'
   : typeof value === 'function' ? 'a function'
+  : typeof value === 'bigint' ? 'a bigint'
   : String(value)
 
 const clampLength = (length) => {
