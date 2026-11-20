@@ -140,7 +140,7 @@ type InitInput =
  * the module is loaded with the package and this resolves at once, so the
  * same code runs in both.
  */
-export function init (input?: InitInput | Promise<InitInput>): Promise<unknown>
+export function init (input?: InitInput | Promise<InitInput> | null): Promise<unknown>
 
 // The types above that are not exported stay private to this file.
 export {}

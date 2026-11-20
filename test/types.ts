@@ -42,6 +42,7 @@ const printed: string = displayTask(task.task)
 
 // init() is there under Node as well, and resolves.
 init().then(() => mathGen(2))
+init(null).then(() => mathGen(2))
 
 // null is the default for every option, as the README says, and for a batch too.
 mathGen(4, { seed: null, max: null })

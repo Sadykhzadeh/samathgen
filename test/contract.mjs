@@ -869,6 +869,10 @@ check('a call before init() says to await it', () => {
 })
 // A page whose first fetch of the .wasm failed has to be able to try again.
 const failedLoad = await init(new Uint8Array([0, 1, 2, 3])).then(() => null, (error) => error)
+// null means no input, as it does for every option, so it loads the same .wasm
+// as init() does.
+const defaultLoad = await init().then(() => 'loaded', (error) => error.message)
+const nullLoad = await init(null).then(() => 'loaded', (error) => error.message)
 const warnings = []
 const warn = console.warn
 console.warn = (...args) => warnings.push(args.join(' '))
@@ -877,6 +881,9 @@ const loadError = await init(readFileSync(new URL('../dist/web/samathgen_bg.wasm
 console.warn = warn
 check('init() takes the module bytes without complaint', () => {
   assert.deepEqual(warnings, [])
+})
+check('init(null) loads as init() does', () => {
+  assert.equal(nullLoad, defaultLoad)
 })
 check('init() loads after a load that failed', () => {
   assert.ok(failedLoad instanceof Error, 'bytes that are not WebAssembly were taken')

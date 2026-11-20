@@ -288,7 +288,7 @@ const readSeed = (seed, count) => {
 export const init = (input) => {
   // wasm-bindgen takes the override wrapped in an object now, and logs a
   // deprecation warning for every bare argument it is still handed.
-  loading = loading || initWasm(input === undefined ? undefined : { module_or_path: input }).then((exports) => {
+  loading = loading || initWasm(input === undefined || input === null ? undefined : { module_or_path: input }).then((exports) => {
     memory = getMemory()
     ints = new Int32Array(memory.buffer)
     ready = true
