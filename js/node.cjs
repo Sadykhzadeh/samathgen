@@ -95,7 +95,7 @@ const editDistance = (a, b) => {
 
 const unknownOption = (name) => {
   const lower = name.toLowerCase()
-  const near = [...OPTIONS].find((known) => {
+  const near = lower.length > 0 && [...OPTIONS].find((known) => {
     const other = known.toLowerCase()
     return other === lower || other.startsWith(lower) || lower.startsWith(other) ||
       (Math.abs(lower.length - other.length) <= 2 && editDistance(lower, other) <= 2)
