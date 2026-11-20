@@ -4,7 +4,7 @@
 // Every `@ts-expect-error` has to mark a line that really is an error, or tsc
 // says so.
 
-import { displayTask, init, mathGen, mathGenBatch } from '../js/node.cjs'
+import { displayTask, evaluate, init, mathGen, mathGenBatch } from '../js/node.cjs'
 import type { MathGenOptions, MathGenResult, Operators } from '../js/node.cjs'
 
 // Everything there is to ask for.
@@ -40,6 +40,9 @@ batch.map((each) => each.task.join(''))
 // A task is printed as a string, with the signs a page uses.
 const printed: string = displayTask(task.task)
 
+// A task is worked out without eval, to the number it reads as.
+const worth: number = evaluate(task.task)
+
 // init() is there under Node as well, and resolves.
 init().then(() => mathGen(2))
 init(null).then(() => mathGen(2))
@@ -69,7 +72,9 @@ mathGen('4')
 mathGenBatch('20', 4)
 // @ts-expect-error a task is numbers, operators and brackets, not words
 displayTask(['sum'])
+// @ts-expect-error a task is numbers, operators and brackets, not words
+evaluate(['sum'])
 // @ts-expect-error distinct belongs to a batch
 const single: MathGenOptions = { distinct: true }
 
-export { pieces, answer, options, printed, single }
+export { pieces, answer, options, printed, single, worth }

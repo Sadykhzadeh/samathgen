@@ -16,8 +16,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   init as nodeInit, mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch, displayTask as nodeDisplayTask,
+  evaluate as nodeEvaluate,
 } from '../js/node.cjs'
-import { init, mathGen as webMathGen, mathGenBatch as webMathGenBatch, displayTask as webDisplayTask } from '../js/web.js'
+import {
+  init, mathGen as webMathGen, mathGenBatch as webMathGenBatch, displayTask as webDisplayTask, evaluate as webEvaluate,
+} from '../js/web.js'
 
 const SAMPLES = Number(process.argv[2] || 200_000)
 
@@ -928,6 +931,73 @@ check('displayTask prints the signs a page uses, the same from either entry poin
   }
   assert.throws(() => nodeDisplayTask(nodeMathGen(3, { seed: 1 })), /displayTask takes the task array, as in displayTask\(result\.task\), got an object/)
   assert.throws(() => webDisplayTask(null), /got null$/)
+})
+
+check('evaluate works a task out as eval does, from either entry point, without eval', () => {
+  for (const [task, value] of [
+    [[36, '/', 6, '+', 2, '*', 5], 16],
+    [[7, '-', '(', -5, ')'], 12],
+    [[2, '*', '(', 3, '+', 4, ')'], 14],
+    [[12, '-', 5, '-', 3], 4],
+    [[1, '-', 2, '-', 3], -4],
+    [[8, '/', 2, '/', 2], 2],
+  ]) {
+    assert.equal(nodeEvaluate(task), value, task.join(''))
+    assert.equal(webEvaluate(task), value, task.join(''))
+  }
+  for (let seed = 0; seed < 2000; seed++) {
+    const { task, answer } = nodeMathGen(2 + (seed % 9), { seed, brackets: seed % 2 === 0, negatives: seed % 3 !== 0 })
+    assert.equal(nodeEvaluate(task), answer, `seed ${seed}`)
+    assert.equal(webEvaluate(task), answer, `seed ${seed}`)
+  }
+  const pool = [1, 2, 3, 5, 8, -4, '+', '-', '*', '/', '(', ')']
+  for (let i = 0; i < 20000; i++) {
+    const task = Array.from({ length: 1 + (i % 9) }, (_, j) => pool[(i * 31 + j * 17 + (i >> 3) * j) % pool.length])
+    let value
+    try {
+      value = nodeEvaluate(task)
+    } catch (error) {
+      assert.ok(error instanceof SyntaxError || error instanceof RangeError, `${task.join('')}: ${error.message}`)
+      continue
+    }
+    if (Number.isFinite(value) && Number.isInteger(value)) {
+      // eslint-disable-next-line no-eval
+      assert.equal(value, eval(task.join('')), task.join(''))
+    }
+    assert.equal(webEvaluate(task), value, task.join(''))
+  }
+  // Generator-shaped input: every negative number is bracketed, as the
+  // generator writes it, so eval reads the same text. Every such string of up
+  // to six tokens is tried, and evaluate has to refuse each one eval refuses.
+  const alphabet = [1, -4, '+', '-', '*', '/', '(', ')']
+  const shapedTasks = (prefix) => {
+    if (prefix.length > 0 && prefix.every((token, i) => token !== -4 || (prefix[i - 1] === '(' && prefix[i + 1] === ')'))) {
+      let evalAccepts = true
+      try {
+        // eslint-disable-next-line no-eval
+        eval(prefix.join(''))
+      } catch {
+        evalAccepts = false
+      }
+      if (!evalAccepts) {
+        assert.throws(() => nodeEvaluate(prefix), undefined, `evaluate accepted what eval refuses: ${prefix.join('')}`)
+      }
+    }
+    if (prefix.length < 6) for (const token of alphabet) shapedTasks([...prefix, token])
+  }
+  shapedTasks([])
+  for (const task of [[], ['+', 1], [1, '+'], [1, '(', 2], [1, 2], ['(', 1], [1, ')']]) {
+    assert.throws(() => nodeEvaluate(task), SyntaxError, JSON.stringify(task))
+    assert.throws(() => webEvaluate(task), SyntaxError, JSON.stringify(task))
+  }
+  assert.throws(() => nodeEvaluate([4, '/', 0]), /division by zero in "4\/0"$/)
+  assert.throws(() => webEvaluate([4, '/', 0]), RangeError)
+  for (const token of ['sum', '', NaN, 1.5, '+-']) {
+    assert.throws(() => nodeEvaluate([1, '+', token]), /a task is made of numbers, operators and brackets, got /, String(token))
+    assert.throws(() => webEvaluate([token]), TypeError, String(token))
+  }
+  assert.throws(() => nodeEvaluate(nodeMathGen(3, { seed: 1 })), /evaluate takes the task array, as in evaluate\(result\.task\), got an object/)
+  assert.throws(() => webEvaluate('1+1'), /got "1\+1"$/)
 })
 
 check('the same seed gives the same task from either entry point', () => {

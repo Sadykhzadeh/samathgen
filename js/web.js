@@ -411,3 +411,53 @@ export const displayTask = (task) => {
     return PRINTED.get(token)
   }).join('')
 }
+
+// The value of a task, worked out with the precedence it is written with and
+// without eval, so a page that forbids eval can still check one. A division
+// that is not exact gives a fraction, as it does in JavaScript; a task from
+// mathGen never does.
+export const evaluate = (task) => {
+  if (!Array.isArray(task)) throw new TypeError(`evaluate takes the task array, as in evaluate(result.task), got ${got(task)}`)
+  for (const token of task) {
+    if (!Number.isInteger(token) && !(typeof token === 'string' && token.length === 1 && '+-*/()'.includes(token))) {
+      throw new TypeError(`a task is made of numbers, operators and brackets, got ${got(token)}`)
+    }
+  }
+  const text = task.join('')
+  let at = 0
+  const malformed = () => new SyntaxError(`a task is one complete expression, got ${quoted(text)}`)
+  const sum = () => {
+    let value = product()
+    while (task[at] === '+' || task[at] === '-') {
+      const operator = task[at++]
+      const right = product()
+      value = operator === '+' ? value + right : value - right
+    }
+    return value
+  }
+  const product = () => {
+    let value = operand()
+    while (task[at] === '*' || task[at] === '/') {
+      const operator = task[at++]
+      const right = operand()
+      if (operator === '*') {
+        value *= right
+      } else {
+        if (right === 0) throw new RangeError(`division by zero in ${quoted(text)}`)
+        value /= right
+      }
+    }
+    return value
+  }
+  const operand = () => {
+    const token = task[at++]
+    if (typeof token === 'number') return token
+    if (token !== '(') throw malformed()
+    const value = sum()
+    if (task[at++] !== ')') throw malformed()
+    return value
+  }
+  const value = sum()
+  if (at !== task.length) throw malformed()
+  return value
+}

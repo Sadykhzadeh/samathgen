@@ -114,9 +114,10 @@ for (const { task, quizOptions } of quiz) {
 ```
 
 Every task reads as a sum that works out to its answer, so a program can check
-a pupil's reply without trusting the generator: `Function` or any
-expression parser given `task.join('')` returns `answer`, and a harder sheet
-is a longer `length` with `brackets: true`.
+a pupil's reply without trusting the generator: `evaluate(task)` returns
+`answer`, and so does `Function` or any expression parser given
+`task.join('')`, though on a page that forbids `eval` only `evaluate` will run.
+A harder sheet is a longer `length` with `brackets: true`.
 
 ### Choosing options for a class
 
@@ -308,6 +309,22 @@ console.log(`${displayTask(task)} = ${answer}`)
 
 A token that is not a whole number, an operator or a bracket is a `TypeError`, and so
 is a value that is not an array, such as the result itself rather than its `task`.
+
+### `evaluate(task)`
+
+Works out what a task comes to, with the precedence it is written with, and
+without `eval`, so it runs on a page whose Content Security Policy forbids
+it. A task that is not one complete expression is a `SyntaxError`, a division
+by zero a `RangeError`, and a token that is not a whole number, operator or
+bracket a `TypeError`. A division that is not exact gives a fraction, as it does in
+JavaScript; a task from `mathGen` never does.
+
+```js
+import { evaluate, mathGen } from 'samathgen'
+
+const { task, answer } = mathGen(4, { seed: 2024 })
+console.log(evaluate(task) === answer)   // true
+```
 
 TypeScript declarations ship with the package.
 
