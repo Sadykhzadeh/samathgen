@@ -655,6 +655,57 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('a flat task is built for exactly the answers a search of its chains reaches', () => {
+    // A flat task is runs of / joined by + and -, each divisor from 2 to 10
+    // as the generator draws them, every running result from 0 to max. The
+    // search works out every answer a task of up to five numbers can reach
+    // that way, and the generator has to build those and refuse the rest.
+    const reachable = (operators, max, length) => {
+      // A run of / is a chain; without / a term is a single number.
+      const chain = [null, new Set()]
+      for (let n = 1; n <= max; n++) chain[1].add(n)
+      for (let k = 2; k <= length; k++) {
+        chain[k] = new Set()
+        if (!operators.includes('/')) continue
+        for (const value of chain[k - 1]) {
+          for (let d = 2; d <= Math.min(10, max); d++) if (value % d === 0) chain[k].add(value / d)
+        }
+      }
+      const reach = [null]
+      for (let n = 1; n <= length; n++) {
+        const set = new Set(chain[n])
+        for (let k = 1; k < n; k++) {
+          for (const running of reach[n - k]) {
+            for (const term of chain[k]) {
+              if (operators.includes('+') && running + term <= max) set.add(running + term)
+              if (operators.includes('-') && running - term >= 0) set.add(running - term)
+            }
+          }
+        }
+        reach[n] = set
+      }
+      return reach
+    }
+    for (const operators of [['+', '-', '/'], ['-', '/'], ['+', '/'], ['/']]) {
+      for (const max of [10, 12, 15, 20]) {
+        const reach = reachable(operators, max, 5)
+        for (let length = 2; length <= 5; length++) {
+          for (let answer = 0; answer <= max; answer++) {
+            let built = false
+            for (let seed = 0; seed < 40 && !built; seed++) {
+              try {
+                built = mathGen(length, { operators, brackets: 'never', negatives: false, max, answer, seed }).answer === answer
+              } catch (error) {
+                if (!(error instanceof RangeError)) throw error
+              }
+            }
+            assert.equal(built, reach[length].has(answer), `${operators.join('')}, max ${max}, ${length} numbers, answer ${answer}`)
+          }
+        }
+      }
+    }
+  })
+
   check('negatives: false refuses what it cannot build', () => {
     assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
     assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)
