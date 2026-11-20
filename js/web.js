@@ -111,10 +111,13 @@ const unknownOption = (name) => {
   )
 }
 
+// Only an object's own keys are read as options: a Map or a URLSearchParams
+// would be taken for one with no options at all, and every default used.
 const readOptions = (more) => {
   if (more === undefined || more === null) return {}
-  if (typeof more !== 'object' || Array.isArray(more)) {
-    throw new TypeError(`options must be an object, got ${got(more)}`)
+  if (typeof more !== 'object' || Array.isArray(more) || Object.prototype.toString.call(more) !== '[object Object]') {
+    const named = typeof more === 'object' && !Array.isArray(more) ? `a ${Object.prototype.toString.call(more).slice(8, -1)}` : got(more)
+    throw new TypeError(`options must be an object, got ${named}`)
   }
   for (const name in more) {
     if (!OPTIONS.has(name)) throw unknownOption(name)

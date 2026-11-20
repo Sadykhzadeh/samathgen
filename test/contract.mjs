@@ -573,6 +573,9 @@ const suite = (mathGen, mathGenBatch) => {
       assert.throws(() => mathGen(4, more), /options must be an object, got /, JSON.stringify(more))
       assert.throws(() => mathGenBatch(2, 4, more), TypeError, JSON.stringify(more))
     }
+    // A Map or a URLSearchParams has its options where an object does not, so it is refused, not read as none.
+    assert.throws(() => mathGen(4, new Map([['max', 20]])), /options must be an object, got a Map$/)
+    assert.throws(() => mathGenBatch(2, 4, new URLSearchParams('max=20')), /options must be an object, got a URLSearchParams$/)
     assert.equal(typeof mathGen(4, null).answer, 'number')
   })
 
