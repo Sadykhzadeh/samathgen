@@ -108,7 +108,8 @@ export function mathGenBatch (count: number, length: number, more?: MathGenBatch
  * and a minus sign `−` for `-` and for a negative number. It is for showing
  * the task; `task.join('')` is the text that evaluates to the answer.
  *
- * A token that is not a number, operator or bracket throws a TypeError.
+ * A token that is not a number, operator or bracket throws a TypeError, and so
+ * does a value that is not an array, such as a result rather than its `task`.
  */
 export function displayTask (task: ReadonlyArray<number | Operators | Bracket>): string
 

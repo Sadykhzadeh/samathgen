@@ -819,6 +819,8 @@ check('displayTask prints the signs a page uses, the same from either entry poin
   }
   assert.throws(() => nodeDisplayTask(['sum']), TypeError)
   assert.throws(() => webDisplayTask([1, 'toString']), TypeError)
+  assert.throws(() => nodeDisplayTask(nodeMathGen(3, { seed: 1 })), /displayTask takes the task array, as in displayTask\(result\.task\), got an object/)
+  assert.throws(() => webDisplayTask(null), /got null$/)
 })
 
 check('the same seed gives the same task from either entry point', () => {
