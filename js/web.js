@@ -111,18 +111,22 @@ const unknownOption = (name) => {
   )
 }
 
-// Only an object's own keys are read as options: a Map or a URLSearchParams
-// would be taken for one with no options at all, and every default used.
+// Only an object's own keys are read as options, so a property another library
+// put on Object.prototype is neither an option nor an unknown one. A Map or a
+// URLSearchParams is refused as a whole, since its options are not own keys
+// and it would be read as having none.
 const readOptions = (more) => {
-  if (more === undefined || more === null) return {}
+  if (more === undefined || more === null) return Object.create(null)
   if (typeof more !== 'object' || Array.isArray(more) || Object.prototype.toString.call(more) !== '[object Object]') {
     const named = typeof more === 'object' && !Array.isArray(more) ? `a ${Object.prototype.toString.call(more).slice(8, -1)}` : got(more)
     throw new TypeError(`options must be an object, got ${named}`)
   }
-  for (const name in more) {
+  const options = Object.create(null)
+  for (const name of Object.keys(more)) {
     if (!OPTIONS.has(name)) throw unknownOption(name)
+    options[name] = more[name]
   }
-  return more
+  return options
 }
 
 const readAnswer = (answer, max) => {

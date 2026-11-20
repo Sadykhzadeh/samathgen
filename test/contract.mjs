@@ -547,6 +547,22 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(4, { answer: 5n, seed: 1 }), /answer must be a number from -10000 to 10000, got a bigint$/)
   })
 
+  check('a property inherited from Object.prototype is neither read as an option nor refused', () => {
+    const expected = mathGen(4, { seed: 3 }).task.join('')
+    Object.prototype.seed = 3
+    Object.prototype.bogus = 1
+    try {
+      // A default seed is drawn, so the polluted one must not be the one used.
+      assert.notEqual(mathGen(4, {}).task.join(''), expected)
+      assert.notEqual(mathGenBatch(2, 4, {})[0].task.join(''), expected)
+      assert.notEqual(mathGen(4, Object.create({ seed: 3 })).task.join(''), expected)
+      assert.ok(mathGen(4, Object.create({ bogus: 1 })).task.length > 0)
+    } finally {
+      delete Object.prototype.seed
+      delete Object.prototype.bogus
+    }
+  })
+
   check('an option the library does not have is refused, with the nearest one named', () => {
     for (const [wrong, near] of [
       ['negative', 'negatives'],
