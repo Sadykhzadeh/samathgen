@@ -899,6 +899,10 @@ check('displayTask prints the signs a page uses, the same from either entry poin
   }
   assert.throws(() => nodeDisplayTask(['sum']), TypeError)
   assert.throws(() => webDisplayTask([1, 'toString']), TypeError)
+  for (const token of [NaN, Infinity, 1.5]) {
+    assert.throws(() => nodeDisplayTask([1, '+', token]), /a task is made of numbers, operators and brackets, got /, String(token))
+    assert.throws(() => webDisplayTask([token]), TypeError, String(token))
+  }
   assert.throws(() => nodeDisplayTask(nodeMathGen(3, { seed: 1 })), /displayTask takes the task array, as in displayTask\(result\.task\), got an object/)
   assert.throws(() => webDisplayTask(null), /got null$/)
 })

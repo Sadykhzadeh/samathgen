@@ -305,7 +305,7 @@ const { task, answer } = mathGen(3, { operators: ['*', '/'], seed: 5 })
 console.log(`${displayTask(task)} = ${answer}`)
 ```
 
-A token that is not a number, an operator or a bracket is a `TypeError`, and so
+A token that is not a whole number, an operator or a bracket is a `TypeError`, and so
 is a value that is not an array, such as the result itself rather than its `task`.
 
 TypeScript declarations ship with the package.

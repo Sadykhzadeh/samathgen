@@ -402,7 +402,7 @@ const PRINTED = new Map([['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷'], ['(
 export const displayTask = (task) => {
   if (!Array.isArray(task)) throw new TypeError(`displayTask takes the task array, as in displayTask(result.task), got ${got(task)}`)
   return task.map((token) => {
-    if (typeof token === 'number') return String(token).replace('-', '−')
+    if (Number.isInteger(token)) return String(token).replace('-', '−')
     if (!PRINTED.has(token)) throw new TypeError(`a task is made of numbers, operators and brackets, got ${got(token)}`)
     return PRINTED.get(token)
   }).join('')
