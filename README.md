@@ -85,8 +85,9 @@ generated tasks; serve the repository over HTTP and open it.
 
 A worksheet for a class that has met adding and taking away within twenty and
 nothing else, with the answers to hand. Everyone given the same `seed` gets
-the same sheet, and the pupil's own number as the seed gives each a sheet of
-their own:
+the same sheet. Give each pupil a seed of their own with room between them: a
+sheet of ten takes the seeds from its `seed` up to `seed + 9`, so pupils 1000
+and 1001 would get sheets that share nine of their ten tasks:
 
 ```js
 import { mathGenBatch } from 'samathgen'
