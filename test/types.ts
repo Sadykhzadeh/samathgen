@@ -48,6 +48,10 @@ mathGen(4, { seed: null, max: null })
 mathGen(4, { answer: null, brackets: null, quizMode: null, operators: null, negatives: null })
 mathGenBatch(3, 2, { distinct: null, seed: null })
 
+// The length may be left out, or null, and is then 2.
+mathGen()
+mathGen(null)
+
 // @ts-expect-error a misspelt option is an error, as it is at run time
 mathGen(4, { negative: false })
 // @ts-expect-error a flag is true or false, not the string a query string gives
