@@ -376,7 +376,7 @@ a dev dependency, so `npm ci` installs it.
 rustup target add wasm32-unknown-unknown
 npm ci                 # installs wasm-pack
 npm run build          # writes dist/node and dist/web
-npm test               # cargo test, then the JavaScript contract suite
+npm test               # cargo test, then the JavaScript suites
 npm run test:types     # the declarations against test/types.ts (needs tsc via npx)
 ```
 

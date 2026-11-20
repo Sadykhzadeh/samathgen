@@ -15,7 +15,7 @@
 // type depend on a tool's unrelated choices.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, rmSync, writeFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, lstatSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const targets = [
@@ -39,24 +39,60 @@ try {
   process.exit(1)
 }
 
-rmSync('dist', { recursive: true, force: true })
+// The build goes into node_modules first and replaces dist only once every
+// target has built, so an interrupted or failed build leaves the last good dist
+// where it was. The old dist is moved aside rather than deleted, so that it can
+// be put back if the new one cannot be moved in.
+const staging = join('node_modules', '.samathgen-build')
+const previous = join(staging, 'previous')
 
-for (const { target, dir, type } of targets) {
-  console.log(`building ${target} -> ${dir}`)
-  execFileSync(
-    process.execPath,
-    [wasmPack, 'build', '--release', '--target', target, '--out-dir', dir, '--out-name', 'samathgen'],
-    { stdio: 'inherit' }
-  )
+// Deleting a directory needs write permission on each directory in it, so this
+// finds a read-only one before anything is moved, rather than halfway through
+// deleting the old dist.
+const replaceable = (path) => {
+  if (!lstatSync(path).isDirectory()) return
+  accessSync(path, constants.W_OK)
+  for (const name of readdirSync(path)) replaceable(join(path, name))
+}
 
-  for (const unwanted of ['.gitignore', 'LICENSE', 'README.md']) {
-    rmSync(join(dir, unwanted), { force: true })
+try {
+  rmSync(staging, { recursive: true, force: true })
+  if (existsSync('dist')) replaceable('dist')
+
+  for (const { target, dir, type } of targets) {
+    console.log(`building ${target} -> ${dir}`)
+    execFileSync(
+      process.execPath,
+      [wasmPack, 'build', '--release', '--target', target, '--out-dir', join(staging, dir), '--out-name', 'samathgen'],
+      { stdio: 'inherit' }
+    )
+
+    for (const unwanted of ['.gitignore', 'LICENSE', 'README.md']) {
+      rmSync(join(staging, dir, unwanted), { force: true })
+    }
+
+    writeFileSync(
+      join(staging, dir, 'package.json'),
+      `${JSON.stringify({ type }, null, 2)}\n`
+    )
   }
 
-  writeFileSync(
-    join(dir, 'package.json'),
-    `${JSON.stringify({ type }, null, 2)}\n`
-  )
+  let moved = false
+  if (existsSync('dist')) {
+    renameSync('dist', previous)
+    moved = true
+  }
+  try {
+    renameSync(join(staging, 'dist'), 'dist')
+  } catch (error) {
+    if (moved) renameSync(previous, 'dist')
+    throw error
+  }
+  rmSync(staging, { recursive: true, force: true })
+} catch (error) {
+  console.error(`build failed: ${error.message}`)
+  rmSync(staging, { recursive: true, force: true })
+  process.exit(1)
 }
 
 console.log('done')
