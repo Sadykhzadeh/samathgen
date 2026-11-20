@@ -706,6 +706,30 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check("brackets: 'never' builds every answer the brackets build, with * or with both + and -", () => {
+    const builds = (more, length, answer) => {
+      for (let seed = 0; seed < 60; seed++) {
+        try {
+          if (mathGen(length, { ...more, answer, seed }).answer === answer) return true
+        } catch (error) {
+          if (!(error instanceof RangeError)) throw error
+        }
+      }
+      return false
+    }
+    for (const operators of [['*'], ['*', '/'], ['+', '-'], ['+', '-', '/'], ['+', '-', '*']]) {
+      for (const max of [10, 20, 30]) {
+        for (let length = 2; length <= 4; length++) {
+          for (let answer = 0; answer <= max; answer++) {
+            const base = { operators, max, negatives: false }
+            if (!builds({ ...base, brackets: true }, length, answer) && !builds({ ...base, brackets: false }, length, answer)) continue
+            assert.ok(builds({ ...base, brackets: 'never' }, length, answer), `${operators.join('')}, max ${max}, ${length} numbers, answer ${answer}`)
+          }
+        }
+      }
+    }
+  })
+
   check('negatives: false refuses what it cannot build', () => {
     assert.throws(() => mathGen(3, { answer: -4, negatives: false }), RangeError)
     assert.throws(() => mathGen(3, { answer: 0, negatives: false, operators: ['+', '*'] }), RangeError)
