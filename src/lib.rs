@@ -605,18 +605,9 @@ fn write_task(out: &mut Vec<i32>, tokens: &mut Vec<Token>, request: &Request, se
     .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, false))
     .or_else(|| fallback_search((low, high), ops, &config, &mut rng, tokens, true))
     .or_else(|| expr::flat_chains(&config(low, true), (low, high), &mut rng, tokens));
-    let Some((answer, expression)) = found else {
+    let Some((answer, _)) = found else {
         return false;
     };
-
-    // The tree is built so that this holds whatever shape it takes, and the
-    // brackets are placed by precedence, so the two halves cannot disagree.
-    // Walking at most 32 leaves to say so out loud is cheap, and it means a
-    // later change cannot quietly bring back the bug this rewrite removed.
-    assert!(
-        expression.value() == answer,
-        "generated task does not evaluate to its answer"
-    );
 
     let quiz = if quiz_mode {
         options::quiz_options(answer, if negatives { -max } else { 0 }, max, &mut rng)

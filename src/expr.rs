@@ -190,6 +190,7 @@ impl Expr {
     }
 
     /// The value this tree evaluates to. Exact by construction.
+    #[cfg(test)]
     pub fn value(&self) -> i64 {
         self.value_of(self.root)
     }
@@ -337,9 +338,10 @@ impl Expr {
 
     /// Writes the task with brackets placed by precedence, and around any
     /// part that would take a step of working it out below `low` or above
-    /// `high`.
-    pub fn write(&self, out: &mut Vec<Token>, low: i64, high: i64) {
-        self.write_steps(self.root, out, low, high);
+    /// `high`. Returns the value the tokens evaluate to, as the walk works
+    /// it out.
+    pub fn write(&self, out: &mut Vec<Token>, low: i64, high: i64) -> i64 {
+        self.write_steps(self.root, out, low, high).0
     }
 
     /// Writes the subtree at `at` and returns its value, with the lowest and
@@ -852,7 +854,14 @@ pub fn generate_within(
             }
         };
         tokens.clear();
-        expr.write(tokens, low, config.max);
+        // The tree evaluates to its answer whatever its shape, and the walk
+        // that places the brackets gives the value the tokens reach, so the
+        // two cannot disagree unless the growth or the brackets are wrong.
+        let value = expr.write(tokens, low, config.max);
+        assert!(
+            value == config.answer,
+            "generated task does not evaluate to its answer"
+        );
         if !config.brackets || has_group(tokens) {
             return Some(expr);
         }
@@ -915,7 +924,11 @@ pub fn generate_with(
             }
         };
         tokens.clear();
-        expr.write(tokens, low, config.max);
+        let value = expr.write(tokens, low, config.max);
+        assert!(
+            value == config.answer,
+            "generated task does not evaluate to its answer"
+        );
         debug_assert!(!config.flat || !has_group(tokens), "a group in a flat task");
         if !config.brackets || has_group(tokens) {
             return Some(expr);
@@ -1190,7 +1203,11 @@ pub fn flat_chains(
     }
     expr.root = root;
     tokens.clear();
-    expr.write(tokens, 0, max);
+    let value = expr.write(tokens, 0, max);
+    assert!(
+        value == answer,
+        "generated task does not evaluate to its answer"
+    );
     Some((answer, expr))
 }
 
