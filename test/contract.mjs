@@ -302,6 +302,16 @@ const suite = (mathGen, mathGenBatch) => {
     }
   })
 
+  check('a task of two numbers has no room for a group, so brackets: true leaves it bare', () => {
+    // Only the brackets around a negative number can be there, as in 24+(-7).
+    for (let seed = 0; seed < 2000; seed++) {
+      const { task } = mathGen(2, { brackets: true, seed })
+      task.forEach((token, i) => {
+        if (token === '(') assert.ok(typeof task[i + 1] === 'number' && task[i + 1] < 0 && task[i + 2] === ')', task.join(''))
+      })
+    }
+  })
+
   check("brackets: 'never' groups nothing, whatever the operators", () => {
     const group = (task) => task.some((token, i) =>
       token === '(' && !(typeof task[i + 1] === 'number' && task[i + 1] < 0))
