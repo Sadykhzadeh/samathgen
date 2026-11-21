@@ -380,11 +380,11 @@ each step replaces some leaf holding `v` with a node that evaluates to exactly
 value whatever shape the tree takes, and the text is produced afterwards with
 brackets placed by precedence.
 
-A flat task of `+`, `-` and `/` without negatives, one with no `*` in it, can
-corner a tree when `max` is small. When the growth refuses such a task, it is
-worked out another way: as a run of chains of `/` joined by `+` and `-`, with a
-table of the running results each length can end on, which says exactly which
-answers can be built and gives one way to build each.
+With `brackets: 'never'`, `negatives: false` and no `*`, a task of `+`, `-` and
+`/` can corner a tree when `max` is small. When the growth refuses such a task,
+it is worked out another way: as a run of chains of `/` joined by `+` and `-`,
+with a table of the running results each length can end on, which says exactly
+which answers can be built and gives one way to build each.
 
 Versions up to 0.1.4 worked the other way round: they spliced a
 sub-expression in place of an operand and printed the result flat, with a
