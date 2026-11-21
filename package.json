@@ -60,7 +60,7 @@
     "test:types": "npx -y -p typescript tsc --noEmit --strict js/index.d.ts && npx -y -p typescript tsc --noEmit --strict --lib es2022 js/node.d.cts && npx -y -p typescript tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 test/types.ts",
     "test:js": "node test/contract.mjs && node test/readme.mjs && node test/build.mjs",
     "bench": "node bench/throughput.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
     "wasm-pack": "^0.15.0"
