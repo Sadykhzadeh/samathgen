@@ -106,17 +106,23 @@ const unknownOption = (name) => {
   )
 }
 
+// Every option, undefined until the caller gives it. A copy of the options
+// starts from this shape: a null-prototype object filled key by key is a
+// dictionary in V8, and reads from one are slower than from an object of a
+// fixed shape.
+const BLANK_OPTIONS = Object.fromEntries([...OPTIONS].map((name) => [name, undefined]))
+
 // Only an object's own keys are read as options, so a property another library
 // put on Object.prototype is neither an option nor an unknown one. A Map or a
 // URLSearchParams is refused as a whole, since its options are not own keys
 // and it would be read as having none.
 const readOptions = (more) => {
-  if (more === undefined || more === null) return Object.create(null)
+  const options = { ...BLANK_OPTIONS }
+  if (more === undefined || more === null) return options
   if (typeof more !== 'object' || Array.isArray(more) || Object.prototype.toString.call(more) !== '[object Object]') {
     const named = typeof more === 'object' && !Array.isArray(more) ? `a ${Object.prototype.toString.call(more).slice(8, -1)}` : got(more)
     throw new TypeError(`options must be an object, got ${named}`)
   }
-  const options = Object.create(null)
   for (const name of Object.keys(more)) {
     if (!OPTIONS.has(name)) throw unknownOption(name)
     options[name] = more[name]
