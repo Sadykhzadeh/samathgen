@@ -98,10 +98,13 @@ export interface MathGenBatchOptions extends MathGenOptions {
  * `mathGen(length, { ...more, seed: seed + i })` gives, unless `distinct`
  * replaced it.
  *
+ * `length` is as for `mathGen`: the number of numbers, clamped to 2..=32,
+ * and left out or null it is 2.
+ *
  * `count` must be a whole number from 0 to 10000, or this throws a
  * RangeError.
  */
-export function mathGenBatch (count: number, length: number, more?: MathGenBatchOptions): MathGenResult[]
+export function mathGenBatch (count: number, length?: number | null, more?: MathGenBatchOptions): MathGenResult[]
 
 /**
  * Writes a task the way it reads on a printed page: `×` for `*`, `÷` for `/`,

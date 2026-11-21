@@ -58,6 +58,8 @@ mathGenBatch(3, 2, { distinct: null, seed: null })
 // The length may be left out, or null, and is then 2.
 mathGen()
 mathGen(null)
+mathGenBatch(20)
+mathGenBatch(20, null)
 
 // @ts-expect-error a misspelt option is an error, as it is at run time
 mathGen(4, { negative: false })

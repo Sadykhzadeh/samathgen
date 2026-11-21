@@ -83,6 +83,8 @@ const suite = (mathGen, mathGenBatch) => {
       assert.throws(() => mathGenBatch(2, length, { seed: 1 }), TypeError, `length ${JSON.stringify(length)}`)
     }
     assert.equal(mathGen(null, { seed: 1 }).task.filter((t) => typeof t === 'number').length, 2)
+    assert.equal(mathGenBatch(2, null, { seed: 1 })[0].task.filter((t) => typeof t === 'number').length, 2)
+    assert.equal(mathGenBatch(2, undefined, { seed: 1 })[0].task.filter((t) => typeof t === 'number').length, 2)
   })
 
   check('an explicit answer of 0 is honoured', () => {
