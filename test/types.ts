@@ -54,6 +54,9 @@ init(null).then(() => mathGen(2))
 mathGen(4, { seed: null, max: null })
 mathGen(4, { answer: null, brackets: null, quizMode: null, operators: null, negatives: null })
 mathGenBatch(3, 2, { distinct: null, seed: null })
+// null options mean the default, as they do for every option.
+mathGen(4, null)
+mathGenBatch(2, 4, null)
 
 // The length may be left out, or null, and is then 2.
 mathGen()

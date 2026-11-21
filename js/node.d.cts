@@ -81,7 +81,7 @@ export interface MathGenResult {
  * out or null it is 2. A value that is not a number throws a TypeError, as
  * does an option the library does not have, with the nearest one named.
  */
-export function mathGen (length?: number | null, more?: MathGenOptions): MathGenResult
+export function mathGen (length?: number | null, more?: MathGenOptions | null): MathGenResult
 
 export interface MathGenBatchOptions extends MathGenOptions {
   /** Leave no task in the batch that repeats one before it: a repeat is
@@ -104,7 +104,7 @@ export interface MathGenBatchOptions extends MathGenOptions {
  * `count` must be a whole number from 0 to 10000, or this throws a
  * RangeError.
  */
-export function mathGenBatch (count: number, length?: number | null, more?: MathGenBatchOptions): MathGenResult[]
+export function mathGenBatch (count: number, length?: number | null, more?: MathGenBatchOptions | null): MathGenResult[]
 
 /**
  * Writes a task the way it reads on a printed page: `×` for `*`, `÷` for `/`,
