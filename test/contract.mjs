@@ -570,15 +570,19 @@ const suite = (mathGen, mathGenBatch) => {
 
   check('a property inherited from Object.prototype is neither read as an option nor refused', () => {
     const expected = mathGen(4, { seed: 3 }).task.join('')
+    const random = Math.random
+    Math.random = () => 0
     Object.prototype.seed = 3
     Object.prototype.bogus = 1
     try {
       // A default seed is drawn, so the polluted one must not be the one used.
+      // The draw is pinned to 0 so that which seed it gives is the same every run.
       assert.notEqual(mathGen(4, {}).task.join(''), expected)
       assert.notEqual(mathGenBatch(2, 4, {})[0].task.join(''), expected)
       assert.notEqual(mathGen(4, Object.create({ seed: 3 })).task.join(''), expected)
       assert.ok(mathGen(4, Object.create({ bogus: 1 })).task.length > 0)
     } finally {
+      Math.random = random
       delete Object.prototype.seed
       delete Object.prototype.bogus
     }
