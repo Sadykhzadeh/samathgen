@@ -1000,6 +1000,15 @@ check('evaluate works a task out as eval does, from either entry point, without 
   assert.throws(() => webEvaluate('1+1'), /got "1\+1"$/)
 })
 
+check('evaluate gives a fraction for a division that is not exact, and names the task it cannot read', () => {
+  for (const evaluate of [nodeEvaluate, webEvaluate]) {
+    assert.equal(evaluate([7, '/', 2]), 3.5)
+    assert.equal(evaluate([7, '/', 2, '*', 2]), 7)
+    assert.throws(() => evaluate([1, '+', 2, ')']), /^SyntaxError: a task is one complete expression, got "1\+2\)"$/)
+    assert.throws(() => evaluate([1, '(', 2]), /^SyntaxError: a task is one complete expression, got "1\(2"$/)
+  }
+})
+
 check('the same seed gives the same task from either entry point', () => {
   for (let seed = 0; seed < 2000; seed++) {
     const more = { seed, quizMode: seed % 2 === 0, brackets: seed % 3 === 0 }
