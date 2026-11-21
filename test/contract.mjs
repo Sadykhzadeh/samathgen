@@ -170,6 +170,13 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(32, { ...sums, answer: [0, 30] }), /an answer from 0 to 30 can be built/)
   })
 
+  check('a refused range wider than 64 answers says that 64 of them were tried', () => {
+    // Division alone cannot reach an answer past max / 2, so none of these
+    // answers can be built. Up to 64 of a range are named; past that, 64 are tried.
+    assert.throws(() => mathGen(4, { operators: ['/'], answer: [5001, 5100] }), /^RangeError: no task of 4 terms evaluating to an answer from 5001 to 5100 \(64 of them tried\) can be built from \/\./)
+    assert.throws(() => mathGen(4, { operators: ['/'], answer: [5001, 5064] }), /^RangeError: no task of 4 terms evaluating to an answer from 5001 to 5064 can be built from \/\./)
+  })
+
   check('a seed that is not a number is refused rather than ignored', () => {
     for (const seed of ['42', NaN, Infinity, {}]) {
       assert.throws(() => mathGen(4, { seed }), TypeError, `seed ${String(seed)}`)
