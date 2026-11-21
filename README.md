@@ -74,9 +74,10 @@ mathGen(4, { quizMode: true })
 ```
 
 Until `init()` has finished, `mathGen` and `mathGenBatch` throw an error that
-says so. If loading fails, as when the `.wasm` cannot be fetched, `init()`
-rejects and can be called again. The Node entry point exports `init()` too, resolving at once, so code
-written this way also runs under Node, in tests or on a server.
+says so; `displayTask`, `evaluate` and `workingOut` need no loading. If loading
+fails, as when the `.wasm` cannot be fetched, `init()` rejects and can be
+called again. The Node entry point exports `init()` too, resolving at once, so
+code written this way also runs under Node, in tests or on a server.
 
 `test/browser.html` is a page that does exactly this and then checks 20 000
 generated tasks; serve the repository over HTTP and open it.
@@ -355,6 +356,14 @@ task whose working needs a value that is not a whole number, as `1/2` or
 `2/3*4`, is also a `RangeError`, naming the part that is not whole. Otherwise
 it takes the same tokens as `evaluate`, refuses what `evaluate` refuses, and
 throws a `TypeError` for a value that is not an array.
+
+### `init(input?)`
+
+Loads the WebAssembly for the browser entry point, from `input` when one is
+given: a URL, a `fetch` Response, the bytes or a compiled module, or a promise
+for one. Left out, it loads the `.wasm` beside the package. Calls share one
+load, so calling `init()` again while it runs, or after it has finished, gives
+the same promise. Under Node it resolves at once and ignores its input.
 
 TypeScript declarations ship with the package.
 
