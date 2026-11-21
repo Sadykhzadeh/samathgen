@@ -1,7 +1,14 @@
 // Node entry point. wasm-pack's nodejs target loads the module synchronously
 // from disk, so this works under plain require() and, through Node's named
 // export detection, under `import { mathGen } from 'samathgen'` as well.
-const { generate, generate_batch: generateBatch, wasm_memory: getMemory } = require('../dist/node/samathgen.js')
+let wasm
+try {
+  wasm = require('../dist/node/samathgen.js')
+} catch (error) {
+  if (error.code !== 'MODULE_NOT_FOUND') throw error
+  throw new Error('samathgen has not been built: run npm ci, then npm run build')
+}
+const { generate, generate_batch: generateBatch, wasm_memory: getMemory } = wasm
 
 // A call leaves its result in the module's memory, at the address it returns,
 // as a count of integers and then those integers, and they are read from

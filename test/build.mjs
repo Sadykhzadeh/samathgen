@@ -6,7 +6,7 @@
 //   node test/build.mjs
 
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -78,6 +78,8 @@ try {
   mkdirSync(join(project, 'node_modules', 'wasm-pack'), { recursive: true })
   mkdirSync(join(project, 'bin'))
   cpSync(join(root, 'scripts', 'build.mjs'), join(project, 'scripts', 'build.mjs'))
+  mkdirSync(join(project, 'js'))
+  cpSync(join(root, 'js', 'node.cjs'), join(project, 'js', 'node.cjs'))
 
   writeFileSync(join(project, 'node_modules', 'wasm-pack', 'run.js'), `
     const { mkdirSync, writeFileSync } = require('node:fs')
@@ -93,6 +95,12 @@ try {
   `)
   writeFileSync(join(project, 'bin', 'cargo'), '#!/bin/sh\nexit 0\n')
   chmodSync(join(project, 'bin', 'cargo'), 0o755)
+
+  const unbuilt = spawnSync(process.execPath, ['-e', "require('./js/node.cjs')"], { cwd: project, encoding: 'utf8' })
+  check('the Node entry point before a build says to run the build', () => {
+    assert.notEqual(unbuilt.status, 0)
+    assert.match(unbuilt.stderr, /^Error: samathgen has not been built: run npm ci, then npm run build$/m)
+  })
 
   const first = await start('first').exited
   const firstListing = listing()
