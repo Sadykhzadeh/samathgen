@@ -19,6 +19,9 @@ jobs:
 
   package:
     runs-on: docker
+    strategy:
+      matrix:
+        node-version: ['18', '26']
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -26,7 +29,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: actions/setup-node@v7
         with:
-          node-version: '26'
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run build
