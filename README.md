@@ -151,7 +151,7 @@ const secondYear = mathGenBatch(10, 3, {
 
 ## API
 
-### `mathGen(length, more?)`
+### `mathGen(length?, more?)`
 
 `length` is how many numbers the task contains, clamped to `2..=32`. A value
 that is not a number, such as `'6'`, is a `TypeError`; left out, or `null`, it
@@ -255,7 +255,7 @@ is rare except for three numbers of `+` and `/` under a small `max`: within
 20, `(a+b)/c` and `a/(b+c)` make at most 10, so 52% of such tasks have no
 group, and 91% without negatives.
 
-### `mathGenBatch(count, length, more?)`
+### `mathGenBatch(count, length?, more?)`
 
 Builds `count` tasks in one call, for a worksheet or a whole quiz. It takes the
 same options as `mathGen` and returns an array of the same results, a little
@@ -332,11 +332,12 @@ console.log(evaluate(task) === answer)   // true
 Lists the steps of working a task out, from the task itself down to its
 answer, for a teacher to show on the board or a pupil to check against. Each
 step works out one operation and evaluates to the same answer, so each can be
-printed with `displayTask`. The leftmost operation that no higher-precedence
-operator is waiting on goes first, and a bracketed group is worked out before
-anything outside it. A group that comes out at zero or above loses its
-brackets, and a negative one keeps them, as `mathGen` writes every negative
-number:
+printed with `displayTask`. The result is an array of tasks, the first the
+task itself and the last its answer on its own. The leftmost operation that no
+higher-precedence operator is waiting on goes first, and a bracketed group is
+worked out before anything outside it. A group that comes out at zero or above
+loses its brackets, and a negative one keeps them, as `mathGen` writes every
+negative number:
 
 ```js
 import { displayTask, workingOut } from 'samathgen'
