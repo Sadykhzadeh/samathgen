@@ -47,7 +47,7 @@ const suite = (mathGen, mathGenBatch) => {
     for (let i = 0; i < SAMPLES; i++) {
       const length = 2 + (i % 7)
       const brackets = i % 3 === 0
-      const result = mathGen(length, { brackets, quizMode: i % 5 === 0 })
+      const result = mathGen(length, { brackets, quizMode: i % 5 === 0, seed: i })
       const text = result.task.join('')
       // eslint-disable-next-line no-eval
       const value = eval(text)
@@ -425,7 +425,7 @@ const suite = (mathGen, mathGenBatch) => {
   check(`a batch keeps the contract too,${(SAMPLES / 10).toLocaleString('en-US')} tasks`, () => {
     let wrong = 0
     for (let i = 0; i < SAMPLES / 1000; i++) {
-      for (const result of mathGenBatch(100, 2 + (i % 7), { brackets: i % 2 === 0, quizMode: true })) {
+      for (const result of mathGenBatch(100, 2 + (i % 7), { brackets: i % 2 === 0, quizMode: true, seed: i * 100 })) {
         // eslint-disable-next-line no-eval
         if (eval(result.task.join('')) !== result.answer) wrong++
         assert.ok(result.quizOptions.includes(result.answer))
