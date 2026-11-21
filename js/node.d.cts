@@ -124,6 +124,21 @@ export function displayTask (task: ReadonlyArray<number | Operators | Bracket>):
  */
 export function evaluate (task: ReadonlyArray<number | Operators | Bracket>): number
 
+/**
+ * The steps of working a task out, from the task itself to its answer. Each
+ * step works out one operation, the leftmost one no operator of higher
+ * precedence is waiting on, and evaluates to the same answer, so each can be
+ * shown with displayTask. A group worked out to a negative number keeps its
+ * brackets, as mathGen writes a negative number; the last step is the answer
+ * on its own.
+ *
+ * A task that evaluate refuses is refused in the same way. A task of more
+ * than 500 tokens, or one whose working needs a value that is not a whole
+ * number, as `1/2` does, throws a RangeError; anything that is not an array
+ * throws a TypeError.
+ */
+export function workingOut (task: ReadonlyArray<number | Operators | Bracket>): Array<Array<number | Operators | Bracket>>
+
 /** What the global constructor `Name` makes, or `never` where nothing
  *  declares one. A Node project has no DOM library, and naming `Response`
  *  or `WebAssembly.Module` outright would fail to type-check there. */

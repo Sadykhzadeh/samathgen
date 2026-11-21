@@ -477,3 +477,84 @@ export const evaluate = (task) => {
   if (at !== task.length) throw malformed()
   return value
 }
+
+// The steps of working a task out, from the task itself to its answer, each
+// one a task that evaluates to the same answer. A step works out one
+// operation: the leftmost one that no operator of higher precedence is
+// waiting on, so an operand is a number or a number in its own brackets, and
+// a group that is worked out to a non-negative number loses its brackets.
+// A negative one keeps them, as mathGen writes every negative number.
+const PRECEDENCE = new Map([['+', 1], ['-', 1], ['*', 2], ['/', 2]])
+const rank = (token) => PRECEDENCE.get(token) || 0
+
+// Where the operand that ends just before the operator at `at` starts, or -1.
+const operandBefore = (task, at) => {
+  if (typeof task[at - 1] === 'number') return at - 1
+  if (task[at - 1] === ')' && typeof task[at - 2] === 'number' && task[at - 3] === '(') return at - 3
+  return -1
+}
+
+// Where the operand that starts just after the operator at `at` ends, or -1.
+const operandAfter = (task, at) => {
+  if (typeof task[at + 1] === 'number') return at + 1
+  if (task[at + 1] === '(' && typeof task[at + 2] === 'number' && task[at + 3] === ')') return at + 3
+  return -1
+}
+
+// Most tokens a task may have to be worked out. Each step rebuilds the task,
+// so the work grows with the square of its length, and a task from mathGen is
+// about a hundred tokens at most.
+const MAX_WORKED_TOKENS = 500
+
+// The task with one step worked out, or undefined when it is a number. A
+// number in brackets loses them when it is not negative, or when it is in
+// brackets already; a negative number on its own keeps them, as mathGen
+// writes it. Then an operation is worked out, the leftmost one that no
+// operator of higher precedence is waiting on, and a group worked out to a
+// negative number keeps its brackets too.
+const workOneOut = (task) => {
+  if (task.length === 3 && task[0] === '(' && task[2] === ')') return [task[1]]
+  for (let at = 0; at < task.length; at++) {
+    if (task[at] === '(' && typeof task[at + 1] === 'number' && task[at + 2] === ')' &&
+      (task[at + 1] >= 0 || (task[at - 1] === '(' && task[at + 3] === ')'))) {
+      return [...task.slice(0, at), task[at + 1], ...task.slice(at + 3)]
+    }
+  }
+  for (let at = 0; at < task.length; at++) {
+    const precedence = rank(task[at])
+    if (precedence === 0) continue
+    const first = operandBefore(task, at)
+    const last = operandAfter(task, at)
+    if (first < 0 || last < 0) continue
+    if (rank(task[first - 1]) > precedence || rank(task[last + 1]) > precedence) continue
+    const span = task.slice(first, last + 1)
+    const value = evaluate(span)
+    if (!Number.isInteger(value)) {
+      throw new RangeError(`workingOut needs a whole number at every step, but ${quoted(span.join(''))} is not one`)
+    }
+    const whole = first === 0 && last === task.length - 1
+    const wrapped = task[first - 1] === '(' && task[last + 1] === ')'
+    if (wrapped && value >= 0) return [...task.slice(0, first - 1), value, ...task.slice(last + 2)]
+    if (!wrapped && value < 0 && !whole) return [...task.slice(0, first), '(', value, ')', ...task.slice(last + 1)]
+    return [...task.slice(0, first), value, ...task.slice(last + 1)]
+  }
+  return undefined
+}
+
+/**
+ * The steps of working a task out: the task, then the task with one step
+ * worked out, and so on down to its answer. Each step evaluates to the answer,
+ * so each can be shown with displayTask. A task that evaluate refuses is
+ * refused here in the same way; so is one longer than 500 tokens, and one
+ * whose working needs a value that is not a whole number.
+ */
+export const workingOut = (task) => {
+  if (!Array.isArray(task)) throw new TypeError(`workingOut takes the task array, as in workingOut(result.task), got ${got(task)}`)
+  if (task.length > MAX_WORKED_TOKENS) {
+    throw new RangeError(`workingOut takes a task of at most ${MAX_WORKED_TOKENS} tokens, got ${task.length}`)
+  }
+  evaluate(task)
+  const steps = [task.slice()]
+  for (let next = workOneOut(task); next !== undefined; next = workOneOut(next)) steps.push(next)
+  return steps
+}

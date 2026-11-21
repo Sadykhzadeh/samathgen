@@ -327,6 +327,34 @@ const { task, answer } = mathGen(4, { seed: 2024 })
 console.log(evaluate(task) === answer)   // true
 ```
 
+### `workingOut(task)`
+
+Lists the steps of working a task out, from the task itself down to its
+answer, for a teacher to show on the board or a pupil to check against. Each
+step works out one operation and evaluates to the same answer, so each can be
+printed with `displayTask`. The leftmost operation that no higher-precedence
+operator is waiting on goes first, and a bracketed group is worked out before
+anything outside it. A group that comes out at zero or above loses its
+brackets, and a negative one keeps them, as `mathGen` writes every negative
+number:
+
+```js
+import { displayTask, workingOut } from 'samathgen'
+
+console.log(workingOut([36, '/', 6, '+', 2, '*', 5]).map(displayTask).join(' = '))
+// 36÷6+2×5 = 6+2×5 = 6+10 = 16
+console.log(workingOut([2, '-', '(', 3, '-', 8, ')']).map(displayTask).join(' = '))
+// 2−(3−8) = 2−(−5) = 7
+```
+
+A number in brackets that are not needed loses them, so `((1))` is worked out
+to `1` in two steps. A task can be at most 500 tokens long, since every step
+rebuilds the task, and a `RangeError` names the limit when it is longer. A
+task whose working needs a value that is not a whole number, as `1/2` or
+`2/3*4`, is also a `RangeError`, naming the part that is not whole. Otherwise
+it takes the same tokens as `evaluate`, refuses what `evaluate` refuses, and
+throws a `TypeError` for a value that is not an array.
+
 TypeScript declarations ship with the package.
 
 ## How it works

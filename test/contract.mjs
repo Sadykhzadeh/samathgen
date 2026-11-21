@@ -16,10 +16,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   init as nodeInit, mathGen as nodeMathGen, mathGenBatch as nodeMathGenBatch, displayTask as nodeDisplayTask,
-  evaluate as nodeEvaluate,
+  evaluate as nodeEvaluate, workingOut as nodeWorkingOut,
 } from '../js/node.cjs'
 import {
   init, mathGen as webMathGen, mathGenBatch as webMathGenBatch, displayTask as webDisplayTask, evaluate as webEvaluate,
+  workingOut as webWorkingOut,
 } from '../js/web.js'
 
 const SAMPLES = Number(process.argv[2] || 200_000)
@@ -1051,6 +1052,52 @@ check('the same seed gives the same task from either entry point', () => {
   assert.deepEqual(webMathGenBatch(500, 6, more), nodeMathGenBatch(500, 6, more), 'batch')
   const tables = { seed: 7, operators: ['*'], distinct: true }
   assert.deepEqual(webMathGenBatch(40, 2, tables), nodeMathGenBatch(40, 2, tables), 'distinct batch')
+})
+
+check('workingOut lists the steps of a task down to its answer, from either entry point', () => {
+  const steps = (task) => nodeWorkingOut(task).map(nodeDisplayTask)
+  assert.deepEqual(steps([36, '/', 6, '+', 2, '*', 5]), ['36\u00f76+2\u00d75', '6+2\u00d75', '6+10', '16'])
+  assert.deepEqual(steps(['(', 2, '+', 3, ')', '*', 4]), ['(2+3)\u00d74', '5\u00d74', '20'])
+  assert.deepEqual(steps([2, '*', '(', 5600, '/', 10, ')']), ['2\u00d7(5600\u00f710)', '2\u00d7560', '1120'])
+  assert.deepEqual(steps([2, '-', '(', 3, '-', 8, ')']), ['2\u2212(3\u22128)', '2\u2212(\u22125)', '7'])
+  assert.deepEqual(steps([2, '-', 5, '*', 3]), ['2\u22125\u00d73', '2\u221215', '\u221213'])
+  assert.deepEqual(steps([3, '-', 8, '+', 2]), ['3\u22128+2', '(\u22125)+2', '\u22123'])
+  assert.deepEqual(steps([5]), ['5'])
+  assert.deepEqual(steps([2, '+', '(', '(', 1, ')', ')']), ['2+((1))', '2+(1)', '2+1', '3'])
+  assert.deepEqual(steps(['(', '(', -5, ')', ')']), ['((\u22125))', '(\u22125)', '\u22125'])
+  assert.deepEqual(steps(['(', 2, '+', 3, ')']), ['(2+3)', '5'])
+  assert.throws(() => nodeWorkingOut([1, '/', 2]), /^RangeError: workingOut needs a whole number at every step, but "1\/2" is not one$/)
+  assert.throws(() => webWorkingOut([2, '/', 3, '*', 4]), /^RangeError: workingOut needs a whole number at every step, but "2\/3" is not one$/)
+  const long = [1, ...Array.from({ length: 249 }, () => ['+', 1]).flat()]
+  assert.equal(long.length, 499)
+  assert.equal(nodeWorkingOut(long).at(-1)[0], 250)
+  assert.equal(webWorkingOut(long).at(-1)[0], 250)
+  const longer = [...long, '+', 1, '+', 1]
+  assert.throws(() => nodeWorkingOut(longer), /^RangeError: workingOut takes a task of at most 500 tokens, got 503$/)
+  assert.throws(() => webWorkingOut([...long, '+', 1]), /^RangeError: workingOut takes a task of at most 500 tokens, got 501$/)
+  assert.deepEqual(nodeWorkingOut([2, '-', '(', 3, '-', 8, ')']), webWorkingOut([2, '-', '(', 3, '-', 8, ')']))
+  assert.throws(() => nodeWorkingOut([1, '/', 0]), /^RangeError: division by zero in "1\/0"$/)
+  assert.throws(() => webWorkingOut([1, '/', 0]), RangeError)
+  for (const bad of [[1, '+'], [1, '(', 2]]) {
+    assert.throws(() => nodeWorkingOut(bad), SyntaxError, JSON.stringify(bad))
+    assert.throws(() => webWorkingOut(bad), SyntaxError, JSON.stringify(bad))
+  }
+  assert.throws(() => nodeWorkingOut(nodeMathGen(3, { seed: 1 })), /workingOut takes the task array, as in workingOut\(result\.task\), got an object/)
+  assert.throws(() => webWorkingOut('1+1'), /got "1\+1"$/)
+  for (let seed = 0; seed < 2000; seed++) {
+    const { task, answer } = nodeMathGen(2 + (seed % 9), { seed, brackets: seed % 2 === 0, negatives: seed % 3 !== 0, operators: seed % 4 === 0 ? ['+', '-'] : undefined })
+    const listed = nodeWorkingOut(task)
+    assert.deepEqual(webWorkingOut(task), listed, `seed ${seed}`)
+    assert.deepEqual(listed[0], task, `seed ${seed}`)
+    assert.deepEqual(listed[listed.length - 1], [answer], `seed ${seed}`)
+    for (const step of listed) assert.equal(nodeEvaluate(step), answer, `seed ${seed}: ${nodeDisplayTask(step)}`)
+    const count = (step, tokens) => step.filter((token) => tokens.includes(token)).length
+    for (let i = 1; i < listed.length; i++) {
+      const shrank = count(listed[i], ['+', '-', '*', '/']) < count(listed[i - 1], ['+', '-', '*', '/']) ||
+        count(listed[i], ['(']) < count(listed[i - 1], ['('])
+      assert.ok(shrank || listed[i].length === 1, `seed ${seed} step ${i} did not work a step out`)
+    }
+  }
 })
 
 console.log(`\n${checks} passed, ${failures} failed`)
