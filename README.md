@@ -314,9 +314,10 @@ is a value that is not an array, such as the result itself rather than its `task
 
 Works out what a task comes to, with the precedence it is written with, and
 without `eval`, so it runs on a page whose Content Security Policy forbids
-it. A task that is not one complete expression is a `SyntaxError`, a division
-by zero a `RangeError`, and a token that is not a whole number, operator or
-bracket a `TypeError`. A division that is not exact gives a fraction, as it does in
+it. A task that is not one complete expression is a `SyntaxError`, as is one
+that nests its brackets deeper than 512, a division by zero a `RangeError`,
+and a token that is not a whole number, operator or bracket a `TypeError`. A
+division that is not exact gives a fraction, as it does in
 JavaScript; a task from `mathGen` never does.
 
 ```js

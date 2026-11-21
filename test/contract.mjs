@@ -1026,6 +1026,19 @@ check('evaluate gives a fraction for a division that is not exact, and names the
   }
 })
 
+check('evaluate turns a task nested far past what the generator can make into a refusal, not a crash', () => {
+  // mathGen nests brackets no deeper than its 32 numbers, so a task nested
+  // thousands deep can only come from outside. Reading one used to overflow
+  // the call stack with a RangeError the contract says nothing about.
+  const depth = 100000
+  const task = [...Array(depth).fill('('), 1, ...Array(depth).fill(')')]
+  for (const evaluate of [nodeEvaluate, webEvaluate]) {
+    assert.throws(() => evaluate(task), /^SyntaxError: a task nests its brackets no deeper than \d+, got/, 'a task nested too deeply')
+    // The cap leaves a task the generator could make untouched.
+    assert.equal(evaluate([2, '*', '(', 3, '+', 4, ')']), 14)
+  }
+})
+
 check('the same seed gives the same task from either entry point', () => {
   for (let seed = 0; seed < 2000; seed++) {
     const more = { seed, quizMode: seed % 2 === 0, brackets: seed % 3 === 0 }

@@ -422,6 +422,13 @@ export const displayTask = (task) => {
 // without eval, so a page that forbids eval can still check one. A division
 // that is not exact gives a fraction, as it does in JavaScript; a task from
 // mathGen never does.
+//
+// mathGen nests brackets no deeper than its 32 numbers, so a task nested far
+// past that can only come from outside. Each level of nesting is a level of
+// recursion here, so an uncapped one exhausts the call stack; a cap well
+// below the stack turns reading one into a refusal.
+const MAX_NESTING = 512
+
 export const evaluate = (task) => {
   if (!Array.isArray(task)) throw new TypeError(`evaluate takes the task array, as in evaluate(result.task), got ${got(task)}`)
   for (const token of task) {
@@ -431,6 +438,7 @@ export const evaluate = (task) => {
   }
   const text = task.join('')
   let at = 0
+  let depth = 0
   const malformed = () => new SyntaxError(`a task is one complete expression, got ${quoted(text)}`)
   const sum = () => {
     let value = product()
@@ -459,8 +467,10 @@ export const evaluate = (task) => {
     const token = task[at++]
     if (typeof token === 'number') return token
     if (token !== '(') throw malformed()
+    if (++depth > MAX_NESTING) throw new SyntaxError(`a task nests its brackets no deeper than ${MAX_NESTING}, got ${quoted(text)}`)
     const value = sum()
     if (task[at++] !== ')') throw malformed()
+    depth--
     return value
   }
   const value = sum()

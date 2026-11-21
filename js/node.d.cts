@@ -116,10 +116,11 @@ export function displayTask (task: ReadonlyArray<number | Operators | Bracket>):
 /**
  * Works out the value of a task with the precedence it is written with,
  * without eval, so it runs where a page forbids eval. A task that is not one
- * complete expression throws a SyntaxError, a division by zero a RangeError,
- * and a token that is not a whole number, operator or bracket a TypeError. A
- * division that is not exact gives a fraction, as in JavaScript; a task from
- * mathGen never does.
+ * complete expression throws a SyntaxError, as does one that nests its
+ * brackets deeper than 512, a division by zero a RangeError, and a token
+ * that is not a whole number, operator or bracket a TypeError. A division
+ * that is not exact gives a fraction, as in JavaScript; a task from mathGen
+ * never does.
  */
 export function evaluate (task: ReadonlyArray<number | Operators | Bracket>): number
 
