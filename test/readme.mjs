@@ -77,5 +77,21 @@ for (const figure of figures) {
 }
 console.log('  ok    the shares the README quotes match a seeded run')
 
+// Two numbers make few tasks, so a batch of them repeats. The README gives the
+// size of the pool of `*` and the repeats a batch of 20 holds, on average, for
+// three sets of options; they are measured over seeded batches here.
+const repeatsIn20 = (more) => {
+  let repeats = 0
+  for (let k = 0; k < 10000; k++) {
+    const texts = required.mathGenBatch(20, 2, { ...more, seed: 100 * k + 1 }).map(({ task }) => task.join(''))
+    repeats += 20 - new Set(texts).size
+  }
+  return (repeats / 10000).toFixed(1)
+}
+const pool = new Set(required.mathGenBatch(10000, 2, { operators: ['*'], seed: 7 }).map(({ task }) => task.join(''))).size
+const repeats = `make ${pool} different tasks, and a batch of 20 holds ${repeatsIn20({ operators: ['*'] })} repeats on average; of \`/\` within 100, ${repeatsIn20({ operators: ['/'], max: 100 })}, and adding within 20 without negatives, ${repeatsIn20({ operators: ['+', '-'], max: 20, negatives: false })}.`
+assert.ok(quoted.includes(repeats), `the README should say: ${repeats}`)
+console.log('  ok    the pool and repeats the README quotes match a seeded run')
+
 console.log(failures === 0 ? `${blocks.length} README examples ran` : `${failures} README examples failed`)
 process.exit(failures === 0 ? 0 : 1)
