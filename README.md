@@ -119,7 +119,7 @@ for (const { task, quizOptions } of quiz) {
 }
 ```
 
-Every task reads as a sum that works out to its answer, so a program can check
+Every task is an expression that works out to its answer, so a program can check
 a pupil's reply without trusting the generator: `evaluate(task)` returns
 `answer`, and so does `Function` or any expression parser given
 `task.join('')`, though on a page that forbids `eval` only `evaluate` will run.
