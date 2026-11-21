@@ -43,7 +43,7 @@ npm install samathgen
 ```
 
 The published package carries the compiled WebAssembly, so installing it needs
-no Rust toolchain.
+no Rust toolchain. TypeScript declarations ship with the package.
 
 ## Usage
 
@@ -369,8 +369,6 @@ given: a URL, a `fetch` Response, the bytes or a compiled module, or a promise
 for one. Left out, it loads the `.wasm` beside the package. Calls share one
 load, so calling `init()` again while it runs, or after it has finished, gives
 the same promise. Under Node it resolves at once and ignores its input.
-
-TypeScript declarations ship with the package.
 
 ## How it works
 
