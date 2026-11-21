@@ -60,6 +60,11 @@ console.log(task.answer)          // 16
 console.log(task.quizOptions)     // [ 16, 18, 19, 15 ]
 ```
 
+Besides `mathGen`, the package exports `mathGenBatch` for a worksheet in one
+call, `displayTask` to print a task, `evaluate` to work out its answer without
+`eval`, and `workingOut` for the steps a pupil can check. [API](#api) has each
+one.
+
 ### Browser
 
 A WebAssembly module larger than 4 kB cannot be compiled synchronously on a
