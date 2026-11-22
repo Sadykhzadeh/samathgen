@@ -1045,7 +1045,21 @@ check('evaluate turns a task nested far past what the generator can make into a 
     assert.throws(() => evaluate(task), /^SyntaxError: a task nests its brackets no deeper than \d+, got/, 'a task nested too deeply')
     // The cap leaves a task the generator could make untouched.
     assert.equal(evaluate([2, '*', '(', 3, '+', 4, ')']), 14)
+    // 512 levels are read and the 513th is refused.
+    assert.equal(evaluate([...Array(512).fill('('), 1, ...Array(512).fill(')')]), 1)
+    assert.throws(() => evaluate([...Array(513).fill('('), 1, ...Array(513).fill(')')]), /^SyntaxError: a task nests its brackets no deeper than 512, got/)
   }
+})
+
+check('evaluate counts the depth of brackets, not how many there are in all', () => {
+  // Groups side by side each close before the next opens, so 600 of them
+  // are only one level deep.
+  const task = []
+  for (let i = 0; i < 600; i++) {
+    if (i > 0) task.push('+')
+    task.push('(', 1, ')')
+  }
+  for (const evaluate of [nodeEvaluate, webEvaluate]) assert.equal(evaluate(task), 600)
 })
 
 check('the same seed gives the same task from either entry point', () => {
@@ -1074,6 +1088,8 @@ check('workingOut lists the steps of a task down to its answer, from either entr
   assert.deepEqual(steps([2, '+', '(', '(', 1, ')', ')']), ['2+((1))', '2+(1)', '2+1', '3'])
   assert.deepEqual(steps(['(', '(', -5, ')', ')']), ['((\u22125))', '(\u22125)', '\u22125'])
   assert.deepEqual(steps(['(', 2, '+', 3, ')']), ['(2+3)', '5'])
+  assert.deepEqual(steps([1, '+', 2, '+', 3]), ['1+2+3', '3+3', '6'])
+  assert.deepEqual(steps([8, '/', 4, '/', 2]), ['8÷4÷2', '2÷2', '1'])
   assert.throws(() => nodeWorkingOut([1, '/', 2]), /^RangeError: workingOut needs a whole number at every step, but "1\/2" is not one$/)
   assert.throws(() => webWorkingOut([2, '/', 3, '*', 4]), /^RangeError: workingOut needs a whole number at every step, but "2\/3" is not one$/)
   const long = [1, ...Array.from({ length: 249 }, () => ['+', 1]).flat()]
