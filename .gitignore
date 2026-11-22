@@ -5,6 +5,10 @@
 # the package is published. Not committed: it is a binary artefact.
 /dist/
 
+# Staging for `npm run build`, removed when a build ends. An interrupted one
+# leaves it behind.
+/.samathgen-build/
+
 # Node
 node_modules/
 *.tgz

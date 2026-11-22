@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -154,6 +154,25 @@ try {
     check('a dist that cannot be replaced is left as it was, every file of it', () => {
       assert.deepEqual(listing(), thirdListing)
     })
+  }
+
+  const shm = existsSync('/dev/shm') ? mkdtempSync(join('/dev/shm', 'samathgen-')) : null
+  try {
+    if (shm === null || statSync(shm).dev === statSync(project).dev) {
+      console.log('  skip  a build with node_modules on another disk, since /dev/shm is not one here')
+    } else {
+      cpSync(join(project, 'node_modules'), join(shm, 'node_modules'), { recursive: true })
+      rmSync(join(project, 'node_modules'), { recursive: true })
+      symlinkSync(join(shm, 'node_modules'), join(project, 'node_modules'))
+      const linked = await start('fifth').exited
+      check('a build with node_modules on another disk installs its output', () => {
+        assert.equal(linked.code, 0, linked.stderr)
+        assert.equal(read('node/samathgen.js'), 'fifth\n')
+        assert.equal(read('web/samathgen.js'), 'fifth\n')
+      })
+    }
+  } finally {
+    if (shm !== null) rmSync(shm, { recursive: true, force: true })
   }
 } finally {
   rmSync(project, { recursive: true, force: true })

@@ -39,11 +39,13 @@ try {
   process.exit(1)
 }
 
-// The build goes into node_modules first and replaces dist only once every
-// target has built, so an interrupted or failed build leaves the last good dist
-// where it was. The old dist is moved aside rather than deleted, so that it can
-// be put back if the new one cannot be moved in.
-const staging = join('node_modules', '.samathgen-build')
+// The build goes into a directory beside dist first, and replaces dist only once
+// every target has built, so an interrupted or failed build leaves the last good
+// dist where it was. The old dist is moved aside rather than deleted, so that it
+// can be put back if the new one cannot be moved in. A rename cannot cross a
+// disk, and node_modules is often a volume or a link to another disk, so the
+// staging directory is not inside it.
+const staging = '.samathgen-build'
 const previous = join(staging, 'previous')
 
 // Deleting a directory needs write permission on each directory in it, so this
