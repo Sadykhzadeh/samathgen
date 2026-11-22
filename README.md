@@ -447,6 +447,11 @@ written independently of the renderer so the two have to agree. The contract
 suite then runs against both entry points, loading the browser one under Node
 from the built bytes, and checks that the two give the same task for a seed.
 
+The crate has no Rust API of its own. Its public functions are the WebAssembly
+exports the npm package wraps; they return a pointer into WebAssembly memory,
+valid only until the next call, so from Rust there is nothing to call safely.
+Use the npm package.
+
 ## Contributing
 
 Contributions are what make the open source community such an amazing place to
