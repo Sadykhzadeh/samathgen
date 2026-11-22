@@ -239,7 +239,7 @@ Returns:
 | --- | --- | --- |
 | `task` | `Array<number \| '+' \| '-' \| '*' \| '/' \| '(' \| ')'>` | The task, token by token. |
 | `answer` | `number` | What the task evaluates to. |
-| `quizOptions` | `number[]` | Four options including the answer, shuffled. The answer is as likely to be the smallest of them as the largest or either between, so their sizes give it away no more than their order does; with `negatives: false` an answer below `3` has fewer options below it, and one above `max - 3` has fewer above it. Empty unless `quizMode`. |
+| `quizOptions` | `number[]` | Four options including the answer, shuffled. The answer is as likely to be the smallest of them as the largest or either between, so their sizes give it away no more than their order does; an answer below `3` (below `-max + 3` when negatives are on) has fewer options below it, and one above `max - 3` has fewer above it. Empty unless `quizMode`. |
 
 **`task.join('')` always evaluates to `answer`.** That is the contract, and it
 is checked over 200 000 generated tasks per entry point on every build.
