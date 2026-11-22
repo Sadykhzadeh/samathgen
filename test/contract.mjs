@@ -948,6 +948,9 @@ check('init() loads after a load that failed', () => {
   assert.ok(failedLoad instanceof Error, 'bytes that are not WebAssembly were taken')
   assert.equal(loadError, null, loadError && loadError.message)
 })
+check('init() hands back the same promise once the module is loading or loaded', () => {
+  assert.equal(init(), init())
+})
 suite(webMathGen, webMathGenBatch)
 
 console.log('\nboth')
@@ -1102,6 +1105,7 @@ check('workingOut lists the steps of a task down to its answer, from either entr
   assert.deepEqual(steps([2, '+', '(', '(', 1, ')', ')']), ['2+((1))', '2+(1)', '2+1', '3'])
   assert.deepEqual(steps(['(', '(', -5, ')', ')']), ['((\u22125))', '(\u22125)', '\u22125'])
   assert.deepEqual(steps(['(', 2, '+', 3, ')']), ['(2+3)', '5'])
+  assert.deepEqual(steps(['(', 3, '-', 3, ')', '*', 2]), ['(3−3)×2', '0×2', '0'])
   assert.deepEqual(steps([1, '+', 2, '+', 3]), ['1+2+3', '3+3', '6'])
   assert.deepEqual(steps([8, '/', 4, '/', 2]), ['8÷4÷2', '2÷2', '1'])
   assert.throws(() => nodeWorkingOut([1, '/', 2]), /^RangeError: workingOut needs a whole number at every step, but "1\/2" is not one$/)
