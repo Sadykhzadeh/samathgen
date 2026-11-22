@@ -609,6 +609,8 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(4, { '': 3 }), /unknown option ""\. The options are /)
     // A name of megabytes is refused, with only its start quoted in the message.
     assert.throws(() => mathGen(4, { ['x'.repeat(2_000_000)]: false }), (error) => error instanceof TypeError && error.message.length < 300)
+    // A cut that would split an emoji stops before it, so the message holds whole characters.
+    assert.throws(() => mathGen(4, { answer: `a${'\u{1F600}'.repeat(20)}` }), (error) => error instanceof TypeError && error.message.endsWith(`got "a${'\u{1F600}'.repeat(19)}..."`))
     // Every real option is let through, and `distinct` by a single task too.
     const everything = { answer: 12, brackets: true, distinct: true, max: 100, negatives: true, operators: ['+', '-', '*', '/'], quizMode: true, seed: 3 }
     assert.equal(mathGen(4, everything).answer, 12)

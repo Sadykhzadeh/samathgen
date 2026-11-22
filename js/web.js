@@ -59,7 +59,13 @@ const drawSeed = (count) => Math.floor(Math.random() * (Number.MAX_SAFE_INTEGER 
 // A string from a request is quoted in its error, but only the start of it,
 // so that a value of megabytes does not come back in full in the message.
 const SHOWN = 40
-const quoted = (text) => JSON.stringify(text.length > SHOWN ? `${text.slice(0, SHOWN)}...` : text)
+// A cut that would leave half of a surrogate pair is made one unit earlier, since
+// JSON.stringify prints a lone surrogate as an escape rather than the character.
+const quoted = (text) => {
+  const start = text.slice(0, SHOWN)
+  const whole = /[\uD800-\uDBFF]$/.test(start) ? start.slice(0, -1) : start
+  return JSON.stringify(text.length > SHOWN ? `${whole}...` : text)
+}
 
 // How a refused value is named in an error: a string in quotes, so that '6'
 // is told from 6, an array as an array, and anything else by its type.
