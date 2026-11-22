@@ -85,7 +85,8 @@ called again. The Node entry point exports `init()` too, resolving at once, so
 code written this way also runs under Node, in tests or on a server.
 
 `test/browser.html` is a page that does exactly this and then checks 20 000
-generated tasks; serve the repository over HTTP and open it.
+generated tasks. From a clone, run `npm ci` and `npm run build` first, then
+serve the repository over HTTP and open it.
 
 ## Examples
 

@@ -56,12 +56,13 @@
   </table>
 
   <script type="module">
-    import { init, mathGen } from '../js/web.js'
-
     const summary = document.getElementById('summary')
     const rows = document.getElementById('rows')
 
     try {
+      // Imported here rather than at the top, so that a missing build is reported
+      // in the summary instead of leaving the page at loading.
+      const { init, mathGen } = await import('../js/web.js')
       await init()
 
       // The same contract the Node suite checks, over a smaller sample so the
