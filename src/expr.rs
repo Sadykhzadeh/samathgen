@@ -142,7 +142,6 @@ pub enum Token {
 }
 
 enum Visit {
-    Missed,
     Split,
     Failed,
 }
@@ -235,52 +234,43 @@ impl Expr {
         })
     }
 
-    /// `room` is the operators the subtree at `at` may be split by where it
-    /// stands, which is all of them unless the task is to have no brackets.
-    /// `to_come` is as for `try_split`.
-    fn split_nth_leaf(
+    /// The operators the leaf at `at` may be split by where it stands: all of
+    /// them unless the task is flat, where each operand of an operator may only
+    /// be split by the operators that precedence leaves room for. Worked out
+    /// from the leaf's parents, so the leaf need not be found by a walk.
+    fn room_of(&self, at: u8, parent: &[u8; 64]) -> Ops {
+        let mut room = Ops::ALL;
+        let mut child = at;
+        while child != 0 {
+            let above = parent[child as usize];
+            if let Node::Binary { op, left, .. } = self.nodes[above as usize] {
+                let (left_room, right_room) = op.flat_operands();
+                room = room.and(if left == child { left_room } else { right_room });
+            }
+            child = above;
+        }
+        room
+    }
+
+    /// Splits the leaf at `at`, which holds `current`, by an operator that
+    /// `room` allows. Its two halves are the last two nodes.
+    fn split_leaf(
         &mut self,
         at: u8,
-        index: &mut usize,
+        current: i64,
         room: Ops,
         to_come: i64,
         config: &Config,
         rng: &mut Rng,
     ) -> Visit {
-        match self.nodes[at as usize] {
-            Node::Num(current) => {
-                if *index > 0 {
-                    *index -= 1;
-                    return Visit::Missed;
-                }
-                match split_value(current, config.ops.and(room), to_come, config, rng) {
-                    Some((left, op, right)) => {
-                        let left = self.push(Node::Num(left));
-                        let right = self.push(Node::Num(right));
-                        self.nodes[at as usize] = Node::Binary { op, left, right };
-                        Visit::Split
-                    }
-                    None => Visit::Failed,
-                }
+        match split_value(current, config.ops.and(room), to_come, config, rng) {
+            Some((left, op, right)) => {
+                let left = self.push(Node::Num(left));
+                let right = self.push(Node::Num(right));
+                self.nodes[at as usize] = Node::Binary { op, left, right };
+                Visit::Split
             }
-            Node::Binary { op, left, right } => {
-                let (left_room, right_room) = if config.flat {
-                    let (left, right) = op.flat_operands();
-                    (room.and(left), room.and(right))
-                } else {
-                    (room, room)
-                };
-                let right_was_leaf = matches!(self.nodes[right as usize], Node::Num(_));
-                match self.split_nth_leaf(left, index, left_room, to_come, config, rng) {
-                    Visit::Missed => match self
-                        .split_nth_leaf(right, index, right_room, to_come, config, rng)
-                    {
-                        Visit::Split if config.flat && right_was_leaf => self.lean_left(at, config),
-                        reached => reached,
-                    },
-                    reached => reached,
-                }
-            }
+            None => Visit::Failed,
         }
     }
 
@@ -292,7 +282,7 @@ impl Expr {
     ///
     /// The right operand of `at` is the leaf that was just split, so its two
     /// new leaves are the last two nodes of the vector.
-    fn lean_left(&mut self, at: u8, config: &Config) -> Visit {
+    fn lean_left(&mut self, at: u8, parent: &mut [u8; 64], config: &Config) -> Visit {
         let Node::Binary { op, left, right } = self.nodes[at as usize] else {
             return Visit::Split;
         };
@@ -326,6 +316,8 @@ impl Expr {
             left: right,
             right: second,
         };
+        parent[left as usize] = right;
+        parent[second as usize] = at;
         Visit::Split
     }
 
@@ -750,20 +742,52 @@ fn grow(config: &Config, wanted: usize, rng: &mut Rng) -> (Expr, usize) {
     let chain = one_chain(config);
     // Counted as it grows rather than walked for on every step.
     let mut leaves = 1;
+    // The leaves in the order a walk of the tree would meet them, and the
+    // parent of each node, so that a leaf is found and its room worked out
+    // without visiting the tree.
+    let mut order = [0u8; 32];
+    let mut parent = [0u8; 64];
     // A leaf is picked at random, so a tree where none can be split is only
     // known to be stuck after enough misses in a row for every leaf to have
     // been tried many times over, and each miss costs a draw.
     let mut misses = 0;
     while leaves < wanted && misses < leaves * MISSES_PER_LEAF {
-        let mut index = rng.below(leaves as u64) as usize;
+        let index = rng.below(leaves as u64) as usize;
         let to_come = if chain {
             (wanted - leaves - 1) as i64
         } else {
             0
         };
-        if let Visit::Split =
-            expr.split_nth_leaf(expr.root, &mut index, Ops::ALL, to_come, config, rng)
-        {
+        let at = order[index];
+        let Node::Num(current) = expr.nodes[at as usize] else {
+            unreachable!("the leaves are kept in order")
+        };
+        let room = if config.flat {
+            expr.room_of(at, &parent)
+        } else {
+            Ops::ALL
+        };
+        let mut visit = expr.split_leaf(at, current, room, to_come, config, rng);
+        if let Visit::Split = visit {
+            let end = expr.nodes.len();
+            parent[end - 2] = at;
+            parent[end - 1] = at;
+            // A flat task that splits the right operand of an operator may
+            // have to regroup that operator, which `lean_left` does.
+            if config.flat {
+                let above = parent[at as usize];
+                if let Node::Binary { right, .. } = expr.nodes[above as usize] {
+                    if right == at {
+                        visit = expr.lean_left(above, &mut parent, config);
+                    }
+                }
+            }
+        }
+        if let Visit::Split = visit {
+            let end = expr.nodes.len();
+            order.copy_within(index..leaves, index + 1);
+            order[index] = (end - 2) as u8;
+            order[index + 1] = (end - 1) as u8;
             leaves += 1;
             misses = 0;
         } else {
