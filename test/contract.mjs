@@ -802,6 +802,24 @@ const suite = (mathGen, mathGenBatch) => {
     assert.equal(mathGen(5, { answer: 5, negatives: false, operators: ['+'], seed: 2 }).task.join(''), '1+1+1+1+1')
   })
 
+  check('negatives: false refuses an answer of max that - and / reach only through 0 or 1', () => {
+    // 10-0, 10-(3-3) and 10/(3/3) reach max, but each has a 0 or a division by 1
+    // in it, and none is built.
+    for (const operators of [['-'], ['-', '/']]) {
+      for (const length of [2, 3]) {
+        for (const brackets of [undefined, true]) {
+          for (let seed = 0; seed < 100; seed++) {
+            assert.throws(
+              () => mathGen(length, { operators, answer: 10, max: 10, negatives: false, brackets, seed }),
+              RangeError,
+              `${operators.join('')}, ${length} numbers, brackets ${brackets}, seed ${seed}`
+            )
+          }
+        }
+      }
+    }
+  })
+
   check('max keeps every number, step and option within it', () => {
     // Each number, and each running result as a pupil works the task out:
     // * and / first, then left to right.

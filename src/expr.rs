@@ -906,8 +906,8 @@ pub fn generate_within(
 /// Without negatives there are more: a negative answer, an answer of 0
 /// without `-`, `+` alone with an answer smaller than the number of terms
 /// (every term is at least 1), and an answer of the max itself with
-/// neither `+` nor `*`, since `-` and `/` would both need a first number
-/// past it.
+/// neither `+` nor `*`, which `-` and `/` reach only through a 0 or a
+/// division by 1.
 ///
 /// Without brackets, a task of `/` alone, or of `-` alone without
 /// negatives, is one chain whose first number grows with every term, and

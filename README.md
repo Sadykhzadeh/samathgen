@@ -197,7 +197,9 @@ be:
   numerator would pass `max`;
 - with `negatives: false`, a negative `answer`, `+` alone with an `answer`
   smaller than `length` (every term is at least 1), and an `answer` of
-  `max` itself with neither `+` nor `*`;
+  `max` itself with neither `+` nor `*`: `-` and `/` reach it only with a 0
+  or a division by 1 somewhere in the task, as in `10-0`, `10-(3-3)` or
+  `10/(3/3)`, and none of those is built;
 - with `brackets: 'never'` and `negatives: false`, a task of `+`, `-` and
   `/` that none of the answers on offer can make. Such a set, without `*`,
   is worked out exactly, so it is refused only in that case. A long task of
