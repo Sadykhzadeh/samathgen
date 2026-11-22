@@ -123,6 +123,21 @@ mod tests {
     }
 
     #[test]
+    fn the_options_are_not_left_in_ascending_order() {
+        // Of the 24 orders four numbers can come in, one is ascending: a
+        // list that always came out sorted would give the answer away by
+        // its place as well as by its size.
+        let mut ascending = 0;
+        for seed in 0..8000 {
+            let options = quiz_options(12, i64::MIN, i64::MAX, &mut Rng::new(seed));
+            if options.windows(2).all(|pair| pair[0] <= pair[1]) {
+                ascending += 1;
+            }
+        }
+        assert!(ascending < 1000, "{ascending} of 8000 came out in order");
+    }
+
+    #[test]
     fn the_options_alone_do_not_tell_which_is_the_answer() {
         // For every shape the four can take, the answer has to be as likely
         // to be the smallest of them as the second, third or largest, or a

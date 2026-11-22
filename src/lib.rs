@@ -854,6 +854,23 @@ mod tests {
     }
 
     #[test]
+    fn the_first_repeat_is_replaced_by_the_task_at_the_seed_after_the_batch() {
+        const MUL: u32 = 1 << 2;
+        let seed = 1000.0;
+        let batch = |distinct| {
+            decode_batch(&generate_batch(
+                20, 2, 0.0, false, false, true, MUL, MAX, seed, distinct,
+            ))
+        };
+        let (plain, distinct) = (batch(false), batch(true));
+        let first = (0..20)
+            .find(|&i| plain[..i].contains(&plain[i]))
+            .expect("the batch repeats a task");
+        let after = decode(&generate(2, 0.0, false, false, true, MUL, MAX, seed + 20.0));
+        assert_eq!(distinct[first], after.task);
+    }
+
+    #[test]
     fn a_distinct_batch_keeps_repeats_once_there_is_nothing_new() {
         // 10 as a sum of two numbers from 1 up is one of nine tasks.
         const ADD: u32 = 1;
@@ -956,6 +973,31 @@ mod tests {
             let in_range = generate_in(4, 17.0, 17.0, ALL, MAX, seed as f64);
             let exact = generate(4, 17.0, true, false, true, ALL, MAX, seed as f64);
             assert_eq!(in_range, exact);
+        }
+    }
+
+    #[test]
+    fn a_range_of_one_answer_leaves_the_generator_where_the_task_alone_would() {
+        let config = |answer| Config {
+            answer,
+            length: 4,
+            brackets: false,
+            ops: Ops::ALL,
+            negatives: true,
+            max: expr::MAX_ABS,
+            flat: false,
+            units: true,
+        };
+        for seed in 0..50 {
+            let mut ranged = Rng::new(seed);
+            let mut direct = Rng::new(seed);
+            let found = grow_for_some_answer((17, 17), config, 1, &mut ranged, &mut Vec::new());
+            let alone = expr::generate_with(&config(17), &mut direct, &mut Vec::new(), 1);
+            assert_eq!(
+                found.map(|(_, e)| expr::render(&e.tokens())),
+                alone.map(|e| expr::render(&e.tokens()))
+            );
+            assert_eq!(ranged.next_u32(), direct.next_u32(), "seed {seed}");
         }
     }
 
