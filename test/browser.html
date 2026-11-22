@@ -40,8 +40,9 @@
   <p>
     The browser entry point needs <code>init()</code> awaited once, because a
     WebAssembly module over 4&nbsp;kB cannot be compiled synchronously on the
-    main thread. Serve this directory over HTTP and open the page; opening the
-    file directly will not work, since modules need an origin.
+    main thread. Serve the repository root over HTTP and open
+    <code>test/browser.html</code>; opening the file directly will not work,
+    since modules need an origin.
   </p>
   <p id="summary" role="status">loading&hellip;</p>
   <table>
@@ -61,8 +62,10 @@
 
     try {
       // Imported here rather than at the top, so that a missing build is reported
-      // in the summary instead of leaving the page at loading.
-      const { init, mathGen } = await import('../js/web.js')
+      // in the summary.
+      const { init, mathGen } = await import('../js/web.js').catch((error) => {
+        throw new Error(`${error.message}. If the build is missing, run npm ci and npm run build`)
+      })
       await init()
 
       // The same contract the Node suite checks, over a smaller sample so the
