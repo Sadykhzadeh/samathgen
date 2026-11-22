@@ -178,6 +178,8 @@ const suite = (mathGen, mathGenBatch) => {
     // answers can be built. Up to 64 of a range are named; past that, 64 are tried.
     assert.throws(() => mathGen(4, { operators: ['/'], answer: [5001, 5100] }), /^RangeError: no task of 4 terms evaluating to an answer from 5001 to 5100 \(64 of them tried\) can be built from \/\./)
     assert.throws(() => mathGen(4, { operators: ['/'], answer: [5001, 5064] }), /^RangeError: no task of 4 terms evaluating to an answer from 5001 to 5064 can be built from \/\./)
+    // 65 answers is the first range that is cut to 64 tried.
+    assert.throws(() => mathGen(4, { operators: ['/'], answer: [5001, 5065] }), /^RangeError: no task of 4 terms evaluating to an answer from 5001 to 5065 \(64 of them tried\) can be built from \/\./)
   })
 
   check('a seed that is not a number is refused rather than ignored', () => {
@@ -624,6 +626,18 @@ const suite = (mathGen, mathGenBatch) => {
     assert.throws(() => mathGen(4, new Map([['max', 20]])), /options must be an object, got a Map$/)
     assert.throws(() => mathGenBatch(2, 4, new URLSearchParams('max=20')), /options must be an object, got a URLSearchParams$/)
     assert.equal(typeof mathGen(4, null).answer, 'number')
+  })
+
+  check('an option name that starts with a real option is taken to mean that option', () => {
+    for (const [wrong, near] of [['quizModeOn', 'quizMode'], ['maxValue', 'max'], ['seedNumber', 'seed']]) {
+      assert.throws(() => mathGen(4, { [wrong]: 1 }), new RegExp(`unknown option "${wrong}", did you mean ${near}\\? `), wrong)
+    }
+  })
+
+  check('a name two edits from an option is suggested as that option', () => {
+    for (const [wrong, near] of [['nagatuves', 'negatives'], ['opertrs', 'operators']]) {
+      assert.throws(() => mathGen(4, { [wrong]: 1 }), new RegExp(`unknown option "${wrong}", did you mean ${near}\\? `), wrong)
+    }
   })
 
   check('a flag that is not true or false is refused instead of read as the default', () => {
