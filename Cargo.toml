@@ -9,6 +9,7 @@ repository = "https://got.az/azer/samathgen"
 readme = "README.md"
 keywords = ["math", "generator", "education", "expression"]
 categories = ["mathematics", "wasm"]
+include = ["/src/**/*.rs", "/Cargo.toml", "/LICENSE", "/README.md"]
 
 [lib]
 # cdylib for the wasm artefact, rlib so `cargo test` can exercise the core
